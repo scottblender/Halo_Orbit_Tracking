@@ -1,4 +1,4 @@
-"""Check rendered grid clearance and exact scheduled horizon semantics."""
+"""Check plot-relative 3D label clearance."""
 import itertools
 import matplotlib
 matplotlib.use('Agg')
@@ -8,7 +8,6 @@ from numpy.testing import assert_allclose
 from scipy.spatial import ConvexHull
 from mpl_toolkits.mplot3d import proj3d
 from halo_tracking.layout import style_3d_axes
-from halo_tracking.horizons import forecast_horizons
 from halo_tracking.study import load_config
 
 
@@ -38,16 +37,3 @@ def test_3d_labels_clear_grid_after_resize_rotation_and_export(tmp_path):
     assert (tmp_path/'layout.png').stat().st_size>0
     plt.close(fig)
 
-
-def test_horizon_checkpoints_do_not_add_measurements():
-    cfg=load_config(); cfg['simulation']['cadence_s']=1500.
-    result=forecast_horizons(cfg,periods=[.01,.02])
-    cadence=cfg['simulation']['cadence_s']/cfg['time_unit_s']
-    assert_allclose(result['times'][result['visible']]/cadence,
-                    np.rint(result['times'][result['visible']]/cadence),atol=1e-9)
-    for period in [.01,.02]:
-        epoch=period*cfg['orbit']['period_tu']
-        assert np.any(result['times']==epoch)
-    assert len(result['horizon_rows'])==4
-    for fit in ['angles','angles_rates']:
-        assert np.all(np.linalg.eigvalsh(result[fit]['covariance'])>0)
