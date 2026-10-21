@@ -51,3 +51,18 @@ def test_ekf_gaps_and_rate_information():
     P=r['angles']['covariance'][-1]-r['angles_rates']['covariance'][-1]
     assert np.linalg.eigvalsh(P).min()>-1e-17
     assert np.linalg.eigvalsh(r['angles_rates']['covariance'][-1]).min()>0
+
+
+def test_observer_pointing_uncertainty_has_expected_range_scaling():
+    from halo_tracking.tracking import observer_tracking_covariance
+    from halo_tracking.measurements import ARCSEC
+    c=load_config(); observer=np.array(c['orbit']['state'])
+    sigma_km=1.; P=np.diag([sigma_km**2/c['length_unit_km']**2]*3+[0.]*3)
+    target=observer.copy();target[:3]+=np.array([.1,.2,.3])
+    first=observer_tracking_covariance(0.,observer,P,target,c)
+    target[:3]=observer[:3]+2*(target[:3]-observer[:3])
+    second=observer_tracking_covariance(0.,observer,P,target,c)
+    expected=np.sqrt(2)*sigma_km/first['range_km']/ARCSEC
+    assert_allclose(first['pointing_rss_sigma_arcsec'],expected,rtol=1e-12)
+    assert_allclose(second['pointing_rss_sigma_arcsec'],expected/2,rtol=1e-12)
+    assert_allclose(first['range_sigma_km'],sigma_km,rtol=1e-12)

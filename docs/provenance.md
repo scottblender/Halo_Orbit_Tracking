@@ -10,7 +10,7 @@ Repository: https://github.com/scottblender/Gradient-Free-Optimization-for-Cislu
 - `src/orbitDynamics/cr3bp_jacobian.m`: analytic Hessian/Coriolis blocks.
 - `scripts/build_observer_orbit_catalog.m`: μ = 0.01215058560962404, LU = 384400 km, and SNRHL2 → southern NRHO/L2 family mapping.
 - `src/measurements/measurement_model.m`: its AR case means angles plus **range**, not angular rates. This study introduces a distinct angles-plus-angular-rates measurement case.
-- `src/targetGeneration/build_truth_gateway.m` and `target_case_config.m`: Gateway truth comes from the external TargetCaseDatabase.mat; no numerical Gateway state was available in those inspected source files.
+- `src/targetGeneration/build_truth_gateway.m` and `target_case_config.m`: Gateway truth is loaded from TargetCaseDatabase.mat. A subsequent inspection of `scripts/build_target_case_database.m` recovered its source state and nominal period; those values now define the configurable Gateway reference. That source uses TU=375695 s, distinct from the retained study time scale.
 - `README.md`: serif, large-font figure conventions and code organization.
 
 ## Lunar_Surface_Sensor_Network_Optimization

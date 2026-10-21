@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from .frames import to_mci
 from .surface_sensor import site_mci
+from .layout import style_3d_axes
 from .study import physical_history
 
 def style():
@@ -33,6 +34,7 @@ def geometry(result):
     ax.scatter(*r[result['visible']].T,s=5,label='LSO visible')
     ax.scatter(*(site_rotating(cfg)*L),s=60,label='LSO')
     ax.scatter(0,0,0,s=80,color='gray',label='Moon center')
+    extra_points = []
     gateway=cfg.get('gateway',{})
     if gateway.get('enabled'):
         from .dynamics import propagate
@@ -40,8 +42,18 @@ def geometry(result):
             raise ValueError('Supply an independently sourced Gateway state before enabling Gateway')
         g=propagate(np.asarray(gateway['state']),result['times'],cfg['mu'])
         ax.plot(*((g[:,:3]-[1-cfg['mu'],0,0])*L).T,label='Gateway reference')
+        extra_points.append((g[:,:3]-[1-cfg['mu'],0,0])*L)
     ax.set(xlabel='Moon-relative x (km)',ylabel='y (km)',zlabel='z (km)',title='Earth–Moon rotating frame')
-    ax.set_box_aspect(np.maximum(np.ptp(r,axis=0),1)); ax.legend(fontsize=10)
+    # Equal physical scale on all three axes, with a cubic display volume.
+    points = np.vstack([r, site_rotating(cfg)*L, np.zeros(3), *extra_points])
+    lower, upper = points.min(axis=0), points.max(axis=0)
+    center = (lower+upper)/2
+    half_span = max(np.ptp(points,axis=0).max()/2, np.finfo(float).eps)
+    for setter, value in zip([ax.set_xlim3d,ax.set_ylim3d,ax.set_zlim3d],center):
+        setter(value-half_span*1.08,value+half_span*1.08)
+    ax.set_box_aspect((1,1,1))
+    ax.legend(fontsize=10, loc='upper left', ncol=2)
+    style_3d_axes(ax)
     return fig
 
 def measurement_history(result):
@@ -94,3 +106,51 @@ def export(fig,path):
     """Save a figure with a white background."""
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
     fig.savefig(path,dpi=200,facecolor='white',bbox_inches='tight')
+
+
+def horizon_comparison(result):
+    """Plot continuous forecast uncertainty and exact period checkpoints."""
+    style()
+    cfg = result['config']
+    times = result['times']
+    periods = times / cfg['orbit']['period_tu']
+    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True, layout='constrained')
+    from .frames import state_transform, acceleration_jacobian
+    for name in ['angles', 'angles_rates']:
+        values = []
+        for t, x, P in zip(times, result['truth'], result[name]['covariance']):
+            B = state_transform(t, cfg); C = B @ P @ B.T
+            G = acceleration_jacobian(t, x, cfg); Ca = G @ P @ G.T
+            values.append([np.sqrt(max(np.trace(C[:3,:3]), 0)),
+                           1000*np.sqrt(max(np.trace(C[3:,3:]), 0)),
+                           1000*np.sqrt(max(np.trace(Ca), 0))])
+        values = np.asarray(values)
+        for j, ax in enumerate(axes):
+            line, = ax.semilogy(periods, values[:,j], label=name.replace('_',' + '))
+            for row in result['horizon_rows']:
+                if row['measurement_case'] == name:
+                    key = ['position_rss_sigma_km','velocity_rss_sigma_m_s','acceleration_rss_sigma_m_s2'][j]
+                    ax.scatter(row['periods'], row[key], color=line.get_color(), s=22)
+    for ax in axes:
+        for p in result['horizon_periods']:
+            ax.axvline(p, color='gray', alpha=.3, ls=':')
+    axes[0].set_ylabel('Position RSS σ (km)')
+    axes[1].set_ylabel('Velocity RSS σ (m/s)')
+    axes[2].set(ylabel='Acceleration RSS σ (m/s²)', xlabel='Elapsed nominal periods')
+    axes[0].legend()
+    fig.suptitle('Nominal covariance forecast — continuous LSO tracking, no stationkeeping')
+    return fig
+
+
+def gateway_pointing_uncertainty(history,cfg):
+    """Plot observer-induced pointing and angular-rate uncertainty only."""
+    style()
+    periods=history['times']/cfg['orbit']['period_tu']
+    fig,axes=plt.subplots(2,1,figsize=(10,7),sharex=True,layout='constrained')
+    for name in ['angles','angles_rates']:
+        axes[0].semilogy(periods,history[name]['pointing_rss_sigma_arcsec'],label=name.replace('_',' + '))
+        axes[1].semilogy(periods,history[name]['angular_rate_rss_sigma_arcsec_s'],label=name.replace('_',' + '))
+    axes[0].set_ylabel('Observer-induced pointing RSS σ (arcsec)')
+    axes[1].set(ylabel='Angular-rate RSS σ (arcsec/s)',xlabel='Elapsed observer nominal periods')
+    axes[0].legend();fig.suptitle('Effect of observer orbit covariance on known-Gateway optical geometry')
+    return fig

@@ -24,11 +24,14 @@ def load_config(path=None):
         raise ValueError('Acceleration PSD must be nonnegative')
     return cfg
 
-def make_truth(cfg):
+def make_truth(cfg, extra_times=None):
     """Propagate the supplied rounded state, preserving its catalog identity."""
     end=cfg['simulation']['periods']*cfg['orbit']['period_tu']
     dt=cfg['simulation']['cadence_s']/cfg['time_unit_s']
-    times=np.unique(np.r_[np.arange(0,end,dt),end])
+    extra = np.asarray([] if extra_times is None else extra_times, dtype=float)
+    if np.any(~np.isfinite(extra)) or np.any(extra<0) or np.any(extra>end):
+        raise ValueError('Extra epochs must lie within the propagation span')
+    times=np.unique(np.r_[np.arange(0,end,dt),end,extra])
     truth=propagate(np.array(cfg['orbit']['state']),times,cfg['mu'])
     elev=np.array([elevation(x,cfg) for x in truth])
     visible=elev>=np.deg2rad(cfg['site']['minimum_elevation_deg'])

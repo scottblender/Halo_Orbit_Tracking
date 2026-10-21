@@ -50,3 +50,15 @@ Covariance-only mode linearizes along nominal truth and performs zero-innovation
 - A narrow covariance is not sufficient evidence of accuracy. Validate with a full-precision orbit, realistic sensor errors, and independent higher-fidelity truth before choosing an operational model.
 
 References: NASA's cislunar modeling reference https://ntrs.nasa.gov/citations/20220014814 and the user's existing CR3BP and lunar-surface EKF projects, documented in provenance.md.
+
+
+## Long horizon forecasts
+
+`forecast_horizons` integrates continuously through the largest requested nominal-period multiple. Requested report epochs are inserted exactly into the propagation grid but are not treated as additional observation times unless they coincide with the configured cadence. Both measurement cases use the same prior, truth, schedule and visibility conditions. Covariance updates are linearized on the nominal trajectory with zero innovations; these results quantify conditional local uncertainty and do not establish filter consistency. No orbit state or covariance resets occur at period boundaries. The report records Moon distance so geometry changes are visible rather than hidden by periodic repetition.
+
+
+## Observer uncertainty contribution to Gateway tracking
+
+For known target position rG and observer position rO, ρ = rG − rO and u = ρ/|ρ|. The derivative of line-of-sight unit direction with respect to observer position is J = −(I − uuᵀ)/|ρ|. With an orthonormal two-axis tangent basis E, the local pointing covariance is E J Prr Jᵀ Eᵀ. The reported pointing RSS σ is its trace square root in arcseconds. A numerical six-state observer Jacobian maps the full observer covariance into alpha, delta and their rates; velocity uncertainty and state cross-covariances are retained.
+
+This mapping treats Gateway as exactly known and does not quantify Gateway orbit-estimation errors. Observer errors remain correlated over time. Camera noise may be combined at a single epoch if independent, but multi-epoch Gateway estimation requires a joint/consider or correlated-noise formulation. Visibility and radiometry of the spacecraft camera are outside this geometric uncertainty calculation.

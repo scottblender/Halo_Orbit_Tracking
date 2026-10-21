@@ -1,0 +1,9 @@
+{
+  "samples": 100,
+  "seed": 241,
+  "first_observation_days": 3.2291666666666665,
+  "prior_mean_nees": 8.042005364698666,
+  "posterior_mean_nees_at_1_arcsec": 61.560116909583165,
+  "sensitivity_posterior_mean_nees_at_5_arcsec": 10.242884928784145,
+  "scope": "Separate first-update sensitivity diagnostic; baseline P0 and configured dynamics. The 5-arcsec case is diagnostic only; baseline noise remains 1 arcsec."
+}

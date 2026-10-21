@@ -42,9 +42,18 @@
     "covariance_override": null
   },
   "gateway": {
-    "enabled": false,
-    "state": null,
-    "period_tu": null,
-    "source": null
+    "enabled": true,
+    "state": [
+      1.02202108343387,
+      0,
+      -0.182096487798513,
+      0,
+      -0.103255420206012,
+      0
+    ],
+    "period_tu": 1.51110546287394,
+    "source": "https://github.com/scottblender/Gradient-Free-Optimization-for-Cislunar-SDA-2/blob/main/scripts/build_target_case_database.m",
+    "reference_time_unit_s": 375695.0,
+    "phase_assumption": "Both supplied normalized states define phase zero at the model t=0; no mission epoch is implied."
   }
 }
