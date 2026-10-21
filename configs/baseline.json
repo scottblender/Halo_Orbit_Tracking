@@ -1,0 +1,50 @@
+{
+  "mu": 0.01215058560962404,
+  "length_unit_km": 384400.0,
+  "time_unit_s": 375190.25852,
+  "orbit": {
+    "catalog_id": 241,
+    "catalog_secondary_id": 6,
+    "family": "SNRHL2",
+    "period_tu": 1.8572,
+    "stability_index": 1.6875,
+    "state": [
+      1.0444,
+      -0.0277,
+      -0.1879,
+      -0.0329,
+      -0.143,
+      0.081
+    ],
+    "source_precision": "four decimal places; not a corrected periodic solution"
+  },
+  "site": {
+    "latitude_deg": 30.0,
+    "longitude_east_deg": 270.0,
+    "radius_km": 1737.4,
+    "prime_meridian_phase_rad": 3.141592653589793,
+    "minimum_elevation_deg": 10.0
+  },
+  "simulation": {
+    "periods": 1.0,
+    "cadence_s": 1800.0,
+    "seed": 241
+  },
+  "estimation": {
+    "initial_position_sigma_km": 1.0,
+    "initial_velocity_sigma_km_s": 1e-05,
+    "acceleration_psd_normalized": 0.0
+  },
+  "measurement": {
+    "angle_sigma_arcsec": 5.0,
+    "angular_rate_sigma_arcsec_s": 0.01,
+    "rate_source": "independent",
+    "covariance_override": null
+  },
+  "gateway": {
+    "enabled": false,
+    "state": null,
+    "period_tu": null,
+    "source": null
+  }
+}
