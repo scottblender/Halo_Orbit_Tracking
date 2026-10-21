@@ -50,11 +50,15 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--in-process',action='store_true',help='Use isolated IPython processes when kernel sockets are unavailable')
     parser.add_argument('--one',type=Path,help=argparse.SUPPRESS)
+    parser.add_argument('--include-advanced',action='store_true',help='Also execute the optional diagnostics; exclude long-span archives')
     args=parser.parse_args()
     if args.one:
         execute_in_process(args.one)
     else:
-        for path in sorted((root/'notebooks').glob('*.ipynb')):
+        paths=sorted((root/'notebooks').glob('*.ipynb'))
+        if args.include_advanced:
+            paths+=sorted((root/'notebooks'/'advanced').glob('*.ipynb'))
+        for path in paths:
             if args.in_process:
                 subprocess.run([sys.executable,__file__,'--one',str(path)],cwd=root,check=True)
             else:

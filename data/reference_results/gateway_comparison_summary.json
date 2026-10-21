@@ -1,0 +1,27 @@
+{
+  "perfect": {
+    "position_rmse_km": 0.4438533682194788,
+    "velocity_rmse_m_s": 0.007680811427866086,
+    "final_position_error_km": 0.021165598488389132,
+    "final_velocity_error_m_s": 0.00015674120726209159,
+    "final_position_forecast_rss_sigma_km": 0.033093570823834205,
+    "final_velocity_forecast_rss_sigma_m_s": 0.00017718074844896208
+  },
+  "lso_estimated": {
+    "position_rmse_km": 3.525713141353981,
+    "velocity_rmse_m_s": 0.09753700439229547,
+    "final_position_error_km": 1.528851514964586,
+    "final_velocity_error_m_s": 0.008517028435944365,
+    "final_position_forecast_rss_sigma_km": 0.5131621227875525,
+    "final_velocity_forecast_rss_sigma_m_s": 0.0026938945475057634
+  },
+  "assumptions": {
+    "duration_observer_periods": 1.0,
+    "duration_days": 8.064853566242407,
+    "lso_observations": 45,
+    "gateway_observations": 388,
+    "measurements": "Angles only on both optical links",
+    "gateway_prior": "Separate per-axis prior: 1 km / 0.01 m/s",
+    "interpretation": "Forecast covariance is local/linearized; RMSE is one paired noise realization, not ensemble performance. Observer-Gateway cross-covariance is propagated; Gateway data do not refine the observer."
+  }
+}
