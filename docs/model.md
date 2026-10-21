@@ -35,6 +35,8 @@ AO and AO+rates use the same angle observations and initial error. With correlat
 
 The EKF propagates six states and covariance, uses the actual visibility schedule, wraps angular residuals and applies Joseph covariance updates. Gaps trigger propagation without measurement updates. Initial P0 is specified in normalized rotating coordinates, with position and velocity sigmas converted from km and km/s. There is no hidden use of the true initial state beyond defining the simulated nominal prior mean; the filter receives a seeded random prior error.
 
+The baseline uses per-axis 1σ uncertainties of 1 km and 0.01 m/s, with zero cross-covariances. In dimensional rotating-state units of km and km/s, P0 = diag(1, 1, 1, 1e-10, 1e-10, 1e-10); the implementation converts this to normalized LU/TU coordinates. Each angle has 1σ = 1 arcsec = 4.848136811e-6 rad, so the angles-only R = 2.350443054e-11 I₂ rad². Independent angular-rate noise remains 0.01 arcsec/s per component. One nominal period is 1.8572 TU, approximately 8.06485 days with the configured TU.
+
 Optional acceleration PSD has units LU²/TU³, in normalized rotating velocity derivatives. A local covariance integral W follows dW/dt = AW + WAᵀ + L. This baseline provides exact model-matched deterministic truth when the PSD is zero.
 
 Covariance-only mode linearizes along nominal truth and performs zero-innovation updates. It predicts local covariance; its zero state error and zero NIS are not measured estimator performance.

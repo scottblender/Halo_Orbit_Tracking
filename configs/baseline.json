@@ -36,7 +36,7 @@
     "acceleration_psd_normalized": 0.0
   },
   "measurement": {
-    "angle_sigma_arcsec": 5.0,
+    "angle_sigma_arcsec": 1.0,
     "angular_rate_sigma_arcsec_s": 0.01,
     "rate_source": "independent",
     "covariance_override": null
