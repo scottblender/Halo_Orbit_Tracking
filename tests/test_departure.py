@@ -49,4 +49,5 @@ def test_rounded_catalog_state_shows_uncontrolled_long_horizon_departure():
     # Closure mismatch starts small and uncontrolled departure compounds.
     assert result['diagnostics']['position_closure_km'] > 50.
     assert result['position_departure_km'][10*20] > 500_000.
-    assert result['position_departure_km'][12*20] > 900_000.
+    # The beginning of observer period 12 occurs at t = 11*T.
+    assert result['position_departure_km'][11*20] > 900_000.
