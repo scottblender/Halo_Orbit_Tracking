@@ -39,3 +39,14 @@ def test_period_trajectory_grid():
         np.testing.assert_allclose(getattr(fixed.axes[0],attr)(),
                                    getattr(fixed.axes[1],attr)())
     plt.close(fixed)
+
+
+def test_rounded_catalog_state_shows_uncontrolled_long_horizon_departure():
+    """Guard against silently replacing the unstable seed with a periodic orbit."""
+    cfg = load_config()
+    assert not cfg['orbit'].get('reference_corrected', False)
+    result = reference_departure(cfg, periods=12, samples_per_period=20)
+    # Closure mismatch starts small and uncontrolled departure compounds.
+    assert result['diagnostics']['position_closure_km'] > 50.
+    assert result['position_departure_km'][10*20] > 500_000.
+    assert result['position_departure_km'][12*20] > 900_000.
