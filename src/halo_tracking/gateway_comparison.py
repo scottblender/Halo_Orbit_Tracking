@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from scipy.integrate import solve_ivp
 from .dynamics import rhs, propagate, propagate_step
+from .orbit_reference import correct_halo_reference
 from .gateway_reference import GatewayReference
 from .visibility import optical_visible
 from .surface_sensor import elevation
@@ -204,19 +205,23 @@ def run_gateway_period_study(cfg, periods=20):
     if periods < 1 or int(periods) != periods:
         raise ValueError('periods must be a positive integer')
     count = int(periods)
-    T = float(cfg['orbit']['period_tu'])
-    result = run_gateway_comparison(cfg, duration_periods=count)
+    nominal_cfg = correct_halo_reference(cfg)
+    T = float(nominal_cfg['orbit']['period_tu'])
+    # Nominal period is corrected, but physical truth retains the ORIGINAL
+    # rounded catalog initial state (never the corrected reference state).
+    tracking_cfg = deepcopy(cfg)
+    tracking_cfg['orbit']['period_tu'] = T
+    result = run_gateway_comparison(tracking_cfg, duration_periods=count)
     times = result['times']
     metrics = comparison_metrics(result)
     x0 = np.asarray(cfg['orbit']['state'], dtype=float)
+    reference0 = np.asarray(nominal_cfg['orbit']['state'], dtype=float)
     L = cfg['length_unit_km']
 
-    # Important: nominal-reference departure is not observer/Gateway range.
-    # The rounded reference is reset every T and therefore does not close
-    # smoothly (approximately 99 km closure defect). This is a diagnostic,
-    # not an independently validated periodic orbit.
+    # Departure is measured from the genuinely periodic nominal orbit,
+    # NOT the old 99-km-mismatched rounded reference and NOT Gateway range.
     sol = solve_ivp(lambda t, x: rhs(t, x, cfg['mu']),
-                    (0., T), x0, method='DOP853', dense_output=True,
+                    (0., T), reference0, method='DOP853', dense_output=True,
                     rtol=2e-11, atol=2e-13)
     if not sol.success:
         raise RuntimeError(sol.message)
@@ -265,7 +270,8 @@ def run_gateway_period_study(cfg, periods=20):
     return dict(rows=rows, reference_closure=result['gateway_reference_closure'],
                 observer_period_tu=T, tracking_window_tu=T,
                 periods=count, config_signature=_config_signature(cfg),
-                method='continuous_cumulative_horizon_keepout_v3')
+                observer_reference_closure=nominal_cfg['orbit']['correction'],
+                method='continuous_nominal_reference_cumulative_v4')
 
 
 
@@ -284,11 +290,11 @@ def load_gateway_period_study(cfg, directory, periods=20):
         return None
     try:
         summary = json.loads(summary_path.read_text())
-        if (summary.get('method') != 'continuous_cumulative_horizon_keepout_v3'
+        if (summary.get('method') != 'continuous_nominal_reference_cumulative_v4'
                 or summary.get('config_signature') != _config_signature(cfg)
                 or summary.get('periods') != int(periods)
                 or not np.isclose(summary.get('tracking_window_tu', np.nan),
-                                  cfg['orbit']['period_tu'])):
+                                  correct_halo_reference(cfg)['orbit']['period_tu'])):
             return None
         with csv_path.open(newline='') as handle:
             reader = csv.DictReader(handle)
@@ -319,7 +325,8 @@ def load_gateway_period_study(cfg, directory, periods=20):
                     observer_period_tu=float(summary['observer_period_tu']),
                     tracking_window_tu=float(summary['tracking_window_tu']),
                     periods=int(periods), config_signature=summary['config_signature'],
-                    method=summary['method'])
+                    method=summary['method'],
+                    observer_reference_closure=summary['observer_reference_closure'])
     except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
         return None
 
@@ -339,13 +346,15 @@ def save_gateway_period_study(study, directory):
                         periods=study['periods'],
                         config_signature=study['config_signature'],
                         method=study['method'],
+                        observer_reference_closure=study['observer_reference_closure'],
                         interpretation=('Each row covers the cumulative interval [0,kT] '
                                         'from ONE continuously propagated observer and EKF. '
                                         'Observation counts and RMSE are cumulative. New '
                                         'observation counts describe just the latest period. '
                                         'Terminal and max observer departure compare against '
-                                        'the repeated rounded one-period observer reference '
-                                        '(not Gateway range). Gateway range is physical observer-'
+                                        'the differentially corrected periodic nominal reference '
+                                        '(the truth remains the rounded freely propagated state). '
+                                        'Gateway range is physical observer-'
                                         'to-target separation. No resets occur. Sun/Earth '
                                         'keep-outs and illustrative slant-range caps reject '
                                         'nonphysical measurements. Small RMSE with no recent '
