@@ -130,7 +130,8 @@ def run_gateway_comparison(cfg, start_tu=0., observer_initial_state=None,
         step=cfg['simulation']['cadence_s']/cfg['time_unit_s']
         end=start_tu+duration_periods*cfg['orbit']['period_tu']
         schedule=np.arange(np.ceil(start_tu/step)*step,end,step)
-        times=np.unique(np.r_[start_tu,schedule,end])
+        boundaries=start_tu+np.arange(1, int(duration_periods))*cfg['orbit']['period_tu']
+        times=np.unique(np.r_[start_tu,schedule,boundaries,end])
         observer=propagate(np.asarray(observer_initial_state),times,cfg['mu'])
         elev=np.array([elevation(x,cfg) for x in observer])
         truth=dict(times=times,truth=observer,elevation=elev,
