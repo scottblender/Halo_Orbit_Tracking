@@ -36,6 +36,7 @@ def reference_departure(cfg, periods=20, samples_per_period=500,
         return sol
 
     nominal = integrate(nominal0, period)
+    catalog_one_period = integrate(x0, float(cfg['orbit']['period_tu']))
     trajectory = integrate(x0, periods*period)
     times = np.linspace(0, periods*period, periods*samples_per_period+1)
     phase = (np.arange(len(times)) % samples_per_period)*period/samples_per_period
@@ -73,8 +74,9 @@ def reference_departure(cfg, periods=20, samples_per_period=500,
     diagnostics = dict(
         position_closure_km=float(np.linalg.norm(closure[:3])),
         velocity_closure_m_s=float(1000*np.linalg.norm(closure[3:])),
-        catalog_closure_km=float(corrected_cfg['orbit']['correction'].get(
-            'original_position_closure_km', np.nan)),
+        catalog_closure_km=float(np.linalg.norm(
+            (catalog_one_period.sol(cfg['orbit']['period_tu'])-x0)[:3])
+            * cfg['length_unit_km']),
         initial_nominal_offset_km=float(
             np.linalg.norm((x0-nominal0)[:3])*cfg['length_unit_km']),
         nominal_period_tu=float(period),
