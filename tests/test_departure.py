@@ -29,7 +29,13 @@ def test_period_trajectory_grid():
     assert len(figure.axes)==2
     assert all(axis.name=='3d' for axis in figure.axes)
     assert all(len(axis.lines)==2 for axis in figure.axes)
-    for attr in ['get_xlim3d','get_ylim3d','get_zlim3d']:
-        np.testing.assert_allclose(getattr(figure.axes[0],attr)(),
-                                   getattr(figure.axes[1],attr)())
+    assert not figure.axes[0].get_xticklabels()
+    assert not figure.axes[1].get_xticklabels()
+    assert 'Period 01' in figure.axes[0].get_title()
+    assert 'Period 02' in figure.axes[1].get_title()
     plt.close(figure)
+    fixed=period_trajectory_grid(result,cfg,scale_mode='reference')
+    for attr in ['get_xlim3d','get_ylim3d','get_zlim3d']:
+        np.testing.assert_allclose(getattr(fixed.axes[0],attr)(),
+                                   getattr(fixed.axes[1],attr)())
+    plt.close(fixed)
