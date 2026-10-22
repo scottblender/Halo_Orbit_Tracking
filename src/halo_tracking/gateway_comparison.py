@@ -5,7 +5,8 @@ import hashlib
 import json
 from pathlib import Path
 import numpy as np
-from .dynamics import propagate, propagate_step
+from scipy.integrate import solve_ivp
+from .dynamics import rhs, propagate, propagate_step
 from .gateway_reference import GatewayReference
 from .visibility import optical_visible
 from .surface_sensor import elevation
@@ -114,7 +115,8 @@ def run_gateway_comparison(cfg, start_tu=0., observer_initial_state=None,
         raise ValueError('duration_periods must be a positive integer')
     cfg['simulation']['periods']=int(duration_periods)
     if start_tu == 0. and observer_initial_state is None:
-        truth=make_truth(cfg)
+        boundaries=np.arange(1, int(duration_periods))*cfg['orbit']['period_tu']
+        truth=make_truth(cfg, extra_times=boundaries)
         times=truth['times']
     else:
         if start_tu < 0 or observer_initial_state is None:
@@ -192,59 +194,79 @@ def save_comparison(result,directory):
 
 
 def run_gateway_period_study(cfg, periods=20):
-    """Measure Gateway performance over one uninterrupted uncontrolled observer arc.
+    """Report cumulative 0-to-kT Gateway performance from one continuous EKF.
 
-    The original rounded catalog state is the observer truth initial condition:
-    no periodic correction, no station-keeping, and no per-period filter reset.
-    Both cases share the same Gateway measurements and nominal Gateway truth.
+    Neither truth nor either estimator is restarted. The rounded observer
+    follows uncontrolled CR3BP propagation; the reference is the uncorrected
+    one-period state repeated at matching phase. Error metrics and observation
+    counts include the whole history [0,kT] for each horizon.
     """
     if periods < 1 or int(periods) != periods:
         raise ValueError('periods must be a positive integer')
     count = int(periods)
-    observer_period = cfg['orbit']['period_tu']
-    # Continuous true observer propagation, filter, and covariance: no re-init.
-    full = run_gateway_comparison(
-        cfg, duration_periods=count)
-    metrics = comparison_metrics(full)
-    times = full['times']
-    ids = np.minimum(np.floor(times / observer_period + 1e-10).astype(int),
-                     count - 1)
-    reference = np.asarray(cfg['orbit']['state'], dtype=float)
-    ranges = np.linalg.norm(
-        (full['truth'][:, :3]-full['gateway_truth'][:, :3])
-        * cfg['length_unit_km'], axis=1)
-    rows, baselines = [], {}
-    for k in range(count):
-        mask = ids == k
-        if not np.any(mask):
-            raise ValueError(f'No samples in observer period {k+1}')
-        at_start = np.argmin(np.abs(times-k*observer_period))
-        transform = state_transform(times[at_start], cfg)
-        displacement = transform @ (full['truth'][at_start]-reference)
-        for name in ['perfect', 'lso_estimated']:
-            metric = metrics[name]
-            rmse_position = float(np.sqrt(np.mean(metric['position_error_km'][mask]**2)))
-            rmse_velocity = float(np.sqrt(np.mean(metric['velocity_error_m_s'][mask]**2)))
-            baselines.setdefault(name, rmse_position)
-            baseline = baselines[name]
-            percent = 100*(rmse_position/baseline-1) if baseline > 0 else float('nan')
+    T = float(cfg['orbit']['period_tu'])
+    result = run_gateway_comparison(cfg, duration_periods=count)
+    times = result['times']
+    metrics = comparison_metrics(result)
+    x0 = np.asarray(cfg['orbit']['state'], dtype=float)
+    L = cfg['length_unit_km']
+
+    # Important: nominal-reference departure is not observer/Gateway range.
+    # The rounded reference is reset every T and therefore does not close
+    # smoothly (approximately 99 km closure defect). This is a diagnostic,
+    # not an independently validated periodic orbit.
+    sol = solve_ivp(lambda t, x: rhs(t, x, cfg['mu']),
+                    (0., T), x0, method='DOP853', dense_output=True,
+                    rtol=2e-11, atol=2e-13)
+    if not sol.success:
+        raise RuntimeError(sol.message)
+    phases = np.mod(times, T)
+    phases[np.isclose(phases, T, atol=1e-9, rtol=0)] = 0.
+    nominal = sol.sol(phases).T
+    deviation_km = L*np.linalg.norm(result['truth'][:, :3] -
+                                    nominal[:, :3], axis=1)
+    ranges = L*np.linalg.norm(result['truth'][:, :3] -
+                              result['gateway_truth'][:, :3], axis=1)
+    gateway_cumulative = np.cumsum(result['gateway_available'].astype(int))
+    lso_cumulative = np.cumsum(result['sensor_visible'].sum(axis=1).astype(int))
+    rows = []
+    previous_gateway, previous_lso = 0, 0
+
+    for k in range(1, count+1):
+        horizon = k*T
+        selected = times <= horizon + 1e-9
+        idx = np.flatnonzero(selected)[-1]
+        if abs(times[idx]-horizon) > 1e-8:
+            raise RuntimeError(f'Missing exact observer-period endpoint {k}')
+        new_gateway = int(gateway_cumulative[idx] - previous_gateway)
+        new_lso = int(lso_cumulative[idx] - previous_lso)
+        previous_gateway = int(gateway_cumulative[idx])
+        previous_lso = int(lso_cumulative[idx])
+        for name in ('perfect', 'lso_estimated'):
+            item = metrics[name]
             rows.append(dict(
-                observer_period=k+1,
-                observer_departure_km=float(np.linalg.norm(displacement[:3])),
+                horizon_periods=k,
+                horizon_days=float(horizon*cfg['time_unit_s']/86400.),
                 case=name,
-                gateway_observations=int(full['gateway_available'][mask].sum()),
-                lso_observations=int(full['sensor_visible'][mask].sum()),
-                mean_gateway_range_km=float(np.mean(ranges[mask])),
-                position_rmse_km=rmse_position,
-                velocity_rmse_m_s=rmse_velocity,
+                terminal_observer_departure_km=float(deviation_km[idx]),
+                max_observer_departure_km=float(np.max(deviation_km[selected])),
+                terminal_gateway_range_km=float(ranges[idx]),
+                mean_gateway_range_km=float(np.mean(ranges[selected])),
+                gateway_observations=previous_gateway,
+                lso_observations=previous_lso,
+                new_gateway_observations=new_gateway,
+                new_lso_observations=new_lso,
+                position_rmse_km=float(np.sqrt(
+                    np.mean(item['position_error_km'][selected]**2))),
+                velocity_rmse_m_s=float(np.sqrt(
+                    np.mean(item['velocity_error_m_s'][selected]**2))),
                 final_position_forecast_rss_sigma_km=float(
-                    metric['position_forecast_rss_sigma_km'][mask][-1]),
-                position_rmse_change_pct=float(percent)))
-    return dict(rows=rows, reference_closure=full['gateway_reference_closure'],
-                observer_period_tu=observer_period,
-                tracking_window_tu=observer_period,
+                    item['position_forecast_rss_sigma_km'][idx])))
+    return dict(rows=rows, reference_closure=result['gateway_reference_closure'],
+                observer_period_tu=T, tracking_window_tu=T,
                 periods=count, config_signature=_config_signature(cfg),
-                method='continuous_rounded_reference_keepout_v2')
+                method='continuous_cumulative_horizon_keepout_v3')
+
 
 
 def _config_signature(cfg):
@@ -262,7 +284,7 @@ def load_gateway_period_study(cfg, directory, periods=20):
         return None
     try:
         summary = json.loads(summary_path.read_text())
-        if (summary.get('method') != 'continuous_rounded_reference_keepout_v2'
+        if (summary.get('method') != 'continuous_cumulative_horizon_keepout_v3'
                 or summary.get('config_signature') != _config_signature(cfg)
                 or summary.get('periods') != int(periods)
                 or not np.isclose(summary.get('tracking_window_tu', np.nan),
@@ -270,24 +292,27 @@ def load_gateway_period_study(cfg, directory, periods=20):
             return None
         with csv_path.open(newline='') as handle:
             reader = csv.DictReader(handle)
-            required = {'observer_period', 'observer_departure_km', 'case',
+            required = {'horizon_periods', 'horizon_days', 'case',
+                        'terminal_observer_departure_km', 'max_observer_departure_km',
+                        'terminal_gateway_range_km', 'mean_gateway_range_km',
                         'gateway_observations', 'lso_observations',
-                        'mean_gateway_range_km', 'position_rmse_km',
-                        'velocity_rmse_m_s', 'final_position_forecast_rss_sigma_km',
-                        'position_rmse_change_pct'}
+                        'new_gateway_observations', 'new_lso_observations',
+                        'position_rmse_km', 'velocity_rmse_m_s',
+                        'final_position_forecast_rss_sigma_km'}
             if not required.issubset(reader.fieldnames or []):
                 return None
             rows = list(reader)
         if len(rows) != 2 * int(periods):
             return None
         for i, item in enumerate(rows):
-            item['observer_period'] = int(item['observer_period'])
-            for key in ['gateway_observations', 'lso_observations']:
+            integer_fields = {'horizon_periods', 'gateway_observations',
+                              'lso_observations', 'new_gateway_observations',
+                              'new_lso_observations'}
+            for key in integer_fields:
                 item[key] = int(item[key])
-            for key in (required - {'observer_period', 'case',
-                                    'gateway_observations', 'lso_observations'}):
+            for key in required - integer_fields - {'case'}:
                 item[key] = float(item[key])
-            if (item['observer_period'] != i // 2 + 1
+            if (item['horizon_periods'] != i // 2 + 1
                     or item['case'] != ('perfect' if i % 2 == 0 else 'lso_estimated')):
                 return None
         return dict(rows=rows, reference_closure=summary['reference_closure'],
@@ -314,11 +339,15 @@ def save_gateway_period_study(study, directory):
                         periods=study['periods'],
                         config_signature=study['config_signature'],
                         method=study['method'],
-                        interpretation=('One continuous tracking run spans all observer periods; '
-                                        'filter states/covariances are never reset between periods. '
-                                        'The original rounded catalog state starts the uncontrolled '
-                                        'trajectory. LSO and Gateway measurements obey range, '
-                                        'Earth 10-degree and Sun 20-degree exclusion cones, '
-                                        'plus physical occultation. Range limits and solar '
-                                        'direction are approximations, not calibrated optical '
-                                        'detection models. RMSE is one noise realization.')),indent=2)+'\n')
+                        interpretation=('Each row covers the cumulative interval [0,kT] '
+                                        'from ONE continuously propagated observer and EKF. '
+                                        'Observation counts and RMSE are cumulative. New '
+                                        'observation counts describe just the latest period. '
+                                        'Terminal and max observer departure compare against '
+                                        'the repeated rounded one-period observer reference '
+                                        '(not Gateway range). Gateway range is physical observer-'
+                                        'to-target separation. No resets occur. Sun/Earth '
+                                        'keep-outs and illustrative slant-range caps reject '
+                                        'nonphysical measurements. Small RMSE with no recent '
+                                        'observations reflects prediction, not live tracking. '
+                                        'RMSE is based on one noise realization.')),indent=2)+'\n')
