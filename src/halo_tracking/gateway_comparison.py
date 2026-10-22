@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from .dynamics import propagate, propagate_step
 from .gateway_reference import GatewayReference
-from .orbit_reference import correct_halo_reference
+from .visibility import optical_visible
 from .surface_sensor import elevation
 from .estimation import initial_covariance
 from .frames import rotation, to_mci, state_transform
@@ -33,18 +33,10 @@ def spacecraft_jacobians(t, observer, gateway, cfg):
     return -Hg,Hg
 
 
-def gateway_visible(observer,gateway,cfg):
-    """Test line-segment Earth/Moon occultation; no camera exclusion angles."""
-    a=observer[:3]; b=gateway[:3]; direction=b-a; length2=direction@direction
-    if length2==0:return False
-    limit = cfg.get('optics', {}).get('gateway_max_range_km')
-    if limit is not None and np.sqrt(length2)*cfg['length_unit_km'] > limit:
-        return False
-    for center,radius in [(np.array([-cfg['mu'],0,0]),6378.1363/cfg['length_unit_km']),
-                          (np.array([1-cfg['mu'],0,0]),cfg['site']['radius_km']/cfg['length_unit_km'])]:
-        fraction=np.clip((center-a)@direction/length2,0,1)
-        if np.linalg.norm(a+fraction*direction-center)<=radius:return False
-    return True
+def gateway_visible(observer, gateway, cfg, time_tu=0.):
+    """Screen line of sight by range and unified Sun/Earth/Moon keep-outs."""
+    return optical_visible(observer[:3], gateway[:3], time_tu, cfg,
+                           link='gateway')
 
 
 def update(state,P,H,R,innovation,consider_observer=False):
@@ -112,7 +104,7 @@ def _filter(truth, cfg, z_lso, z_gateway, exact_observer, nominal=False):
 
 def run_gateway_comparison(cfg, start_tu=0., observer_initial_state=None,
                            gateway_reference=None, duration_periods=1):
-    """Compare tracking over one observer period at the selected epoch."""
+    """Compare tracking over selected observer periods without resetting filters."""
     cfg=deepcopy(cfg)
     if cfg['gateway'].get('state') is None:
         raise ValueError('Gateway reference state is required')
@@ -142,7 +134,7 @@ def run_gateway_comparison(cfg, start_tu=0., observer_initial_state=None,
     dt=cfg['simulation']['cadence_s']/cfg['time_unit_s']
     scheduled=np.isclose(times/dt,np.rint(times/dt),rtol=0,atol=1e-9)
     truth['lso_available']=truth['visible']&scheduled
-    truth['gateway_available']=np.array([gateway_visible(o,g,cfg) for o,g in zip(truth['truth'],truth['gateway_truth'])])&scheduled
+    truth['gateway_available']=np.array([gateway_visible(o,g,cfg,t) for t,o,g in zip(times,truth['truth'],truth['gateway_truth'])])&scheduled
     network = observations(times, truth['truth'], cfg, cfg['simulation']['seed']+30)
     truth.update(network)
     truth['lso_available'] = network['sensor_visible'].any(axis=1)
@@ -200,70 +192,59 @@ def save_comparison(result,directory):
 
 
 def run_gateway_period_study(cfg, periods=20):
-    """Track Gateway through uninterrupted observer departure, without filter resets.
+    """Measure Gateway performance over one uninterrupted uncontrolled observer arc.
 
-    The physical observer begins with a deterministic 1-km, 0.01-m/s
-    perturbation of the corrected periodic reference. All filter states and
-    covariances carry forward across observer-period boundaries.
+    The original rounded catalog state is the observer truth initial condition:
+    no periodic correction, no station-keeping, and no per-period filter reset.
+    Both cases share the same Gateway measurements and nominal Gateway truth.
     """
     if periods < 1 or int(periods) != periods:
         raise ValueError('periods must be a positive integer')
     count = int(periods)
-    corrected = correct_halo_reference(cfg)
-    observer_period = corrected['orbit']['period_tu']
-    initial = np.asarray(corrected['orbit']['state'], dtype=float)
-    noise = np.random.default_rng(corrected['simulation']['seed'] + 921).normal(size=6)
-    scale = np.array([1. / corrected['length_unit_km']]*3 +
-                     [0.01 * .001 * corrected['time_unit_s'] /
-                      corrected['length_unit_km']]*3)
-    initial_truth = initial + noise * scale
+    observer_period = cfg['orbit']['period_tu']
+    # Continuous true observer propagation, filter, and covariance: no re-init.
     full = run_gateway_comparison(
-        corrected, start_tu=0., observer_initial_state=initial_truth,
-        duration_periods=count)
+        cfg, duration_periods=count)
     metrics = comparison_metrics(full)
     times = full['times']
-    # Assign boundaries to the new period except the final endpoint.
     ids = np.minimum(np.floor(times / observer_period + 1e-10).astype(int),
                      count - 1)
-    reference = np.asarray(corrected['orbit']['state'])
+    reference = np.asarray(cfg['orbit']['state'], dtype=float)
     ranges = np.linalg.norm(
-        (full['truth'][:, :3] - full['gateway_truth'][:, :3])
-        * corrected['length_unit_km'], axis=1)
+        (full['truth'][:, :3]-full['gateway_truth'][:, :3])
+        * cfg['length_unit_km'], axis=1)
     rows, baselines = [], {}
     for k in range(count):
         mask = ids == k
         if not np.any(mask):
-            raise ValueError(f'No samples available for period {k+1}')
-        start = k*observer_period
-        at_start = np.argmin(np.abs(times - start))
-        B = state_transform(times[at_start], corrected)
-        offset = B @ (full['truth'][at_start] - reference)
-        departure = float(np.linalg.norm(offset[:3]))
+            raise ValueError(f'No samples in observer period {k+1}')
+        at_start = np.argmin(np.abs(times-k*observer_period))
+        transform = state_transform(times[at_start], cfg)
+        displacement = transform @ (full['truth'][at_start]-reference)
         for name in ['perfect', 'lso_estimated']:
-            item = metrics[name]
-            position = float(np.sqrt(np.mean(item['position_error_km'][mask]**2)))
-            velocity = float(np.sqrt(np.mean(item['velocity_error_m_s'][mask]**2)))
-            baselines.setdefault(name, position)
+            metric = metrics[name]
+            rmse_position = float(np.sqrt(np.mean(metric['position_error_km'][mask]**2)))
+            rmse_velocity = float(np.sqrt(np.mean(metric['velocity_error_m_s'][mask]**2)))
+            baselines.setdefault(name, rmse_position)
             baseline = baselines[name]
-            change = 100*(position/baseline - 1) if baseline > 0 else float('nan')
+            percent = 100*(rmse_position/baseline-1) if baseline > 0 else float('nan')
             rows.append(dict(
                 observer_period=k+1,
-                observer_departure_km=departure,
+                observer_departure_km=float(np.linalg.norm(displacement[:3])),
                 case=name,
                 gateway_observations=int(full['gateway_available'][mask].sum()),
                 lso_observations=int(full['sensor_visible'][mask].sum()),
                 mean_gateway_range_km=float(np.mean(ranges[mask])),
-                position_rmse_km=position,
-                velocity_rmse_m_s=velocity,
+                position_rmse_km=rmse_position,
+                velocity_rmse_m_s=rmse_velocity,
                 final_position_forecast_rss_sigma_km=float(
-                    item['position_forecast_rss_sigma_km'][mask][-1]),
-                position_rmse_change_pct=float(change)))
+                    metric['position_forecast_rss_sigma_km'][mask][-1]),
+                position_rmse_change_pct=float(percent)))
     return dict(rows=rows, reference_closure=full['gateway_reference_closure'],
                 observer_period_tu=observer_period,
                 tracking_window_tu=observer_period,
                 periods=count, config_signature=_config_signature(cfg),
-                method='continuous_corrected_reference_v1')
-
+                method='continuous_rounded_reference_keepout_v2')
 
 
 def _config_signature(cfg):
@@ -281,11 +262,11 @@ def load_gateway_period_study(cfg, directory, periods=20):
         return None
     try:
         summary = json.loads(summary_path.read_text())
-        if (summary.get('method') != 'continuous_corrected_reference_v1'
+        if (summary.get('method') != 'continuous_rounded_reference_keepout_v2'
                 or summary.get('config_signature') != _config_signature(cfg)
                 or summary.get('periods') != int(periods)
                 or not np.isclose(summary.get('tracking_window_tu', np.nan),
-                                  correct_halo_reference(cfg)['orbit']['period_tu'])):
+                                  cfg['orbit']['period_tu'])):
             return None
         with csv_path.open(newline='') as handle:
             reader = csv.DictReader(handle)
@@ -335,8 +316,9 @@ def save_gateway_period_study(study, directory):
                         method=study['method'],
                         interpretation=('One continuous tracking run spans all observer periods; '
                                         'filter states/covariances are never reset between periods. '
-                                        'Truth observer begins with a seeded 1 km and 0.01 m/s '
-                                        'per-axis perturbation of the differentially corrected '
-                                        'halo reference. Optical range gates are illustrative, '
-                                        'not calibrated instrument detection models. RMSE is '
-                                        'from one noise realization.')),indent=2)+'\n')
+                                        'The original rounded catalog state starts the uncontrolled '
+                                        'trajectory. LSO and Gateway measurements obey range, '
+                                        'Earth 10-degree and Sun 20-degree exclusion cones, '
+                                        'plus physical occultation. Range limits and solar '
+                                        'direction are approximations, not calibrated optical '
+                                        'detection models. RMSE is one noise realization.')),indent=2)+'\n')
