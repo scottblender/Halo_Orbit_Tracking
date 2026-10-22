@@ -156,3 +156,34 @@ def state_histories(result, body):
     fig.legend(*axes[0, 0].get_legend_handles_labels(), loc='outside lower center',
                ncol=len(labels), fontsize=10)
     return fig
+
+
+def departure_figures(result, cfg):
+    """Show instantaneous departure and equal-phase cycle RMS growth."""
+    style()
+    periods = result['times']/cfg['orbit']['period_tu']
+    figures = {}
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, layout='constrained')
+    for ax, key, label in zip(axes, ['position_departure_km','velocity_departure_m_s'],
+                             ['Position departure (km)', 'Velocity departure (m/s)']):
+        values = result[key].copy()
+        # The first traversal is the reference, so suppress numerical near-zero differences.
+        values[periods < 1] = np.nan
+        ax.semilogy(periods, np.maximum(values, 1e-12), color='#245b80')
+        for k in range(1, result['diagnostics']['periods']+1):
+            ax.axvline(k, color='0.7', lw=.5, alpha=.4)
+        ax.set_ylabel(label); ax.grid(axis='y', alpha=.2)
+    axes[-1].set_xlabel('Elapsed nominal periods')
+    fig.suptitle('Uncontrolled departure from the repeated one-period reference')
+    figures['departure'] = fig
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, layout='constrained')
+    cycles = np.arange(1, len(result['cycle_position_rms_km'])+1)
+    for ax, key, label in zip(axes, ['cycle_position_rms_km','cycle_velocity_rms_m_s'],
+                             ['Cycle RMS position departure (km)', 'Cycle RMS velocity departure (m/s)']):
+        ax.semilogy(cycles[1:], result[key][1:], 'o-', color='#ca7139', ms=4)
+        ax.set_ylabel(label); ax.grid(alpha=.2)
+    axes[-1].set_xlabel('Cycle number (equal orbital-phase samples)')
+    axes[-1].set_xticks(np.arange(2, len(cycles)+1, 2))
+    fig.suptitle('Growth across cycles — first reference traversal excluded')
+    figures['cycle_growth'] = fig
+    return figures

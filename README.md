@@ -54,3 +54,7 @@ The last command reproduces results without Jupyter. For environments that block
 The final notebook section generates 20 training, 5 validation and 5 test trajectories under `results/system_identification/`. Each NPZ contains uniform times, true rotating states, inertial position/velocity/acceleration, per-site ideal/noisy angles and visibility. `metadata.json` records units, configuration and split definitions.
 
 Initial-condition spreads are 1 km and 0.01 m/s per axis, independently sampled for each one-period arc. The first learning task is next-state prediction from simulated truth states. These are simulation labels, not position measurements obtained from LSOs. Keep whole trajectories within their assigned split; fit scaling on training data only. No learned model, thrust response or stationkeeping controller is included yet.
+
+## Uncontrolled orbit departure
+
+The same notebook compares 20 periods of uncontrolled propagation against the repeated one-period CR3BP reference. It exports instantaneous position/velocity departures and equal-phase cycle RMS plots to `results/departure/`. The rounded reference has about 99 km closure mismatch; departure includes reference resets and phase drift. This diagnostic does not identify chaos or select a stationkeeping cutoff. The Gateway/EKF experiment remains one period.
