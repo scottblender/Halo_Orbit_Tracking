@@ -18,7 +18,7 @@ def test_reference_wrap_and_departure():
 
 
 def test_period_trajectory_grid():
-    """The grid uses one panel per period and identical 3D axes."""
+    """Local scale reveals divergence; fixed scale uses consistent axes."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
