@@ -65,20 +65,36 @@ mismatch; jumps in equal-phase departure include this closure error. The
 original continuous propagation, not reference resets, produces the
 increasing orbital departure seen in the 20-period grid.
 
-Two large, readable trajectory grids are exported:
-`results/departure/observer_period_grid.png` uses a **local per-panel scale**
-so the orbit shape remains legible even after escape; the
-`observer_period_grid_fixed_scale.png` image uses shared first-period axes to
-show absolute departure. Each panel annotates maximum departure; no cramped
-3D tick labels are displayed. A small seeded 1-km, 0.01-m/s per-axis ensemble
-also appears in the instantaneous departure plot.
+The trajectory grids show **cumulative histories**: panel 1 contains the
+continuous interval 0→T, panel 2 contains 0→2T, and panel 20 contains 0→20T.
+There are no new integrations starting in each panel, and the initial
+condition is the same. `results/departure/observer_period_grid.png` uses
+per-panel scaling for legibility; `observer_period_grid_fixed_scale.png`
+holds the nominal reference axes fixed, with escaped arcs clipped.
 
-Gateway tracking uses **one continuous EKF run** for both observer-knowledge
-cases over the chosen number of nominal observer periods. Neither state
-estimates nor covariances reset at period boundaries. Gateway follows its
-own repeating CR3BP reference orbit; no Gateway station-keeping is modeled.
-The original rounded observer is freely propagated, and only period-level
-RMSE summaries are aggregated from the continuous filter run.
+Gateway tracking likewise uses **one continuous EKF run** without resetting
+the estimator or its covariance. Each row of
+`results/departure/gateway_period_metrics.csv` summarizes errors and
+observations cumulatively from **0→kT**, alongside the number of new accepted
+observations during the most recent period. Low cumulative RMSE when new
+observations are zero is not evidence of ongoing tracking capability.
+
+The table distinguishes:
+
+- **Endpoint observer departure (km):** observer position minus a
+  phase-matched, repeated one-period halo reference at t=kT. Since the
+  rounded catalog reference has ~99 km closure error, this is a nominal
+  reference-departure diagnostic, not physical observer-to-Gateway distance.
+- **Maximum observer departure (km):** largest deviation from that reference
+  anywhere between 0 and kT.
+- **Gateway range (km):** actual distance between observer and Gateway,
+  which is what the instrument range-limit screen uses.
+
+No per-period percentage RMSE improvement column is shown because cumulative
+average error and endpoint uncertainty convey distinct phenomena. The
+reference-departure metric requires a corrected periodic orbit for a
+station-keeping cutoff analysis; the rounded reference is retained here to
+visualize the observed departure without hiding it.
 
 ## Optical visibility assumptions
 
@@ -104,7 +120,7 @@ optical-detection modeling:
 
 The notebook loads `gateway_period_metrics.csv` only if the accompanying
 summary has a matching configuration, period count and
-`continuous_rounded_reference_keepout_v2` algorithm version. Older
+`continuous_cumulative_horizon_keepout_v3` algorithm version. Older
 corrected-reference or independent-window results are automatically rejected.
 
 ```powershell
