@@ -169,7 +169,20 @@ def departure_figures(result, cfg):
         values = result[key].copy()
         # The first traversal is the reference, so suppress numerical near-zero differences.
         values[periods < 1] = np.nan
-        ax.semilogy(periods, np.maximum(values, 1e-12), color='#245b80')
+        ax.semilogy(periods, np.maximum(values, 1e-12), color='#245b80',
+                    label='Unperturbed numerical trajectory')
+        ensemble_key = ('ensemble_position_departure_km' if 'position_' in key
+                        else 'ensemble_velocity_departure_m_s')
+        ensemble = result.get(ensemble_key)
+        if ensemble is not None and len(ensemble):
+            lower, median, upper = np.percentile(
+                np.maximum(ensemble, 1e-12), [10, 50, 90], axis=0)
+            ax.fill_between(periods, lower, upper, color='#ca7139', alpha=.16,
+                            label='10th–90th percentile, perturbed ensemble')
+            ax.semilogy(periods, median, color='#ca7139', lw=1.3,
+                        label='Ensemble median')
+        if ax is axes[0]:
+            ax.legend(loc='upper left', fontsize=9)
         for k in range(1, result['diagnostics']['periods']+1):
             ax.axvline(k, color='0.7', lw=.5, alpha=.4)
         ax.set_ylabel(label); ax.grid(axis='y', alpha=.2)
