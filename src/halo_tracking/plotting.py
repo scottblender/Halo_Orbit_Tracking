@@ -190,24 +190,31 @@ def departure_figures(result, cfg):
 
 
 def period_trajectory_figures(result, cfg):
-    """Plot the observer trajectory separately for each period."""
+    """Plot the observer orbit in 3D for each period."""
     style()
     count = result['diagnostics']['periods']
     n = result['diagnostics']['samples_per_period']
     moon = np.array([1 - cfg['mu'], 0., 0.])
     length = cfg['length_unit_km']
-    views = [('x', 'y', 0, 1), ('x', 'z', 0, 2), ('y', 'z', 1, 2)]
     figures = {}
     for k in range(count):
         observer = (result['states'][k*n:(k+1)*n+1, :3] - moon) * length
-        fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.4), layout='constrained')
-        for ax, (a, b, i, j) in zip(axes, views):
-            ax.plot(observer[:, i], observer[:, j], color='#245b80')
-            ax.scatter(observer[0, i], observer[0, j], color='#245b80', s=24)
-            ax.scatter(observer[-1, i], observer[-1, j], marker='x', color='#ca7139', s=35)
-            ax.set(xlabel=f'{a} (km)', ylabel=f'{b} (km)')
-            ax.set_aspect('equal', adjustable='box')
-            ax.grid(alpha=.2)
-        fig.suptitle(f'Observer orbit — period {k + 1}', fontsize=12, fontweight='bold')
+        fig = plt.figure(figsize=(8.2, 6.8), layout='constrained')
+        ax = fig.add_subplot(projection='3d')
+        ax.set_proj_type('ortho')
+        ax.plot(*observer.T, color='#245b80', label='Observer orbit')
+        ax.scatter(*observer[0], color='#245b80', s=30, depthshade=False, label='Start')
+        ax.scatter(*observer[-1], color='#ca7139', marker='x', s=44,
+                   depthshade=False, label='End')
+        center = (observer.min(axis=0) + observer.max(axis=0)) / 2
+        half = max(np.ptp(observer, axis=0).max()/2, 1.) * 1.06
+        for setter, value in zip([ax.set_xlim3d, ax.set_ylim3d, ax.set_zlim3d], center):
+            setter(value-half, value+half)
+        ax.set_box_aspect((1, 1, 1))
+        ax.view_init(elev=22, azim=-52)
+        ax.set(xlabel='x (km)', ylabel='y (km)', zlabel='z (km)')
+        ax.legend(loc='upper left')
+        fig.suptitle(f'Observer orbit — period {k+1}', fontsize=13, fontweight='bold')
+        style_3d_axes(ax, label_gap_fraction=.016)
         figures[f'period_{k+1:02d}_trajectory'] = fig
     return figures

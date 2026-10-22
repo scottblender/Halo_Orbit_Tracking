@@ -1,9 +1,12 @@
 """One-Gateway-period estimation with exact versus LSO-estimated observer state."""
 from copy import deepcopy
+import csv
 import json
 from pathlib import Path
 import numpy as np
 from .dynamics import propagate, propagate_step
+from .gateway_reference import GatewayReference
+from .surface_sensor import elevation
 from .estimation import initial_covariance
 from .frames import rotation, to_mci, state_transform
 from .measurements import predict, measurement_jacobian, wrap, ARCSEC
@@ -102,16 +105,32 @@ def _filter(truth, cfg, z_lso, z_gateway, exact_observer, nominal=False):
                 observer_covariance=np.array(observer_covariances),observer_gateway_covariance=np.array(cross))
 
 
-def run_gateway_comparison(cfg):
-    """Run paired estimates and local covariance forecasts over one Gateway period."""
+def run_gateway_comparison(cfg, start_tu=0., observer_initial_state=None,
+                           gateway_reference=None):
+    """Compare tracking over one Gateway orbit at the selected observer epoch."""
     cfg=deepcopy(cfg)
-    if cfg.get('gateway', {}).get('period_tu', 0) <= 0:
-        raise ValueError('Gateway period must be positive')
-    cfg['simulation']['periods']=cfg['gateway']['period_tu']/cfg['orbit']['period_tu']
-    if cfg['gateway'].get('state') is None:raise ValueError('Gateway reference state is required')
+    if cfg['gateway'].get('state') is None:
+        raise ValueError('Gateway reference state is required')
+    reference = gateway_reference if gateway_reference is not None else GatewayReference(cfg)
     cfg.setdefault('comparison',dict(gateway_position_sigma_km=1.,gateway_velocity_sigma_km_s=1e-5,gateway_camera_sigma_arcsec=1.))
-    truth=make_truth(cfg);times=truth['times'];truth['config']=cfg
-    truth['gateway_truth']=propagate(np.array(cfg['gateway']['state']),times,cfg['mu'])
+    cfg['simulation']['periods']=reference.period/cfg['orbit']['period_tu']
+    if start_tu == 0. and observer_initial_state is None:
+        truth=make_truth(cfg)
+        times=truth['times']
+    else:
+        if start_tu < 0 or observer_initial_state is None:
+            raise ValueError('Supply a nonnegative start and observer initial state')
+        step=cfg['simulation']['cadence_s']/cfg['time_unit_s']
+        end=start_tu+reference.period
+        schedule=np.arange(np.ceil(start_tu/step)*step,end,step)
+        times=np.unique(np.r_[start_tu,schedule,end])
+        observer=propagate(np.asarray(observer_initial_state),times,cfg['mu'])
+        elev=np.array([elevation(x,cfg) for x in observer])
+        truth=dict(times=times,truth=observer,elevation=elev,
+                   visible=elev>=np.deg2rad(cfg['site']['minimum_elevation_deg']))
+    truth['config']=cfg
+    truth['gateway_truth']=reference.states(times)
+    truth['gateway_reference_closure']=reference.closure()
     dt=cfg['simulation']['cadence_s']/cfg['time_unit_s']
     scheduled=np.isclose(times/dt,np.rint(times/dt),rtol=0,atol=1e-9)
     truth['lso_available']=truth['visible']&scheduled
@@ -153,6 +172,7 @@ def save_comparison(result,directory):
     """Save paired state/covariance histories and clear numerical conclusions."""
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     metrics=comparison_metrics(result);summary={}
+    summary['gateway_reference_closure']=result['gateway_reference_closure']
     arrays={key:result[key] for key in ['times','truth','gateway_truth','lso_available','gateway_available','sensor_visible','sensor_elevation_rad','ideal_angles_rad','measured_angles_rad']}
     for name in ['perfect','lso_estimated']:
         item=metrics[name]
@@ -169,3 +189,67 @@ def save_comparison(result,directory):
     (directory/'config.json').write_text(json.dumps(result['config'],indent=2)+'\n')
     np.savez_compressed(directory/'comparison.npz',**arrays)
     return summary
+
+
+def run_gateway_period_study(cfg, periods=20):
+    """Compare one-Gateway-orbit tracking windows at observer-period starts."""
+    if periods < 1 or int(periods) != periods:
+        raise ValueError('periods must be a positive integer')
+    count=int(periods)
+    observer_period=cfg['orbit']['period_tu']
+    boundaries=np.arange(count)*observer_period
+    observer_starts=propagate(np.asarray(cfg['orbit']['state']),boundaries,cfg['mu'])
+    reference=GatewayReference(cfg)
+    rows=[]
+    baselines={}
+    for k,(start,state) in enumerate(zip(boundaries,observer_starts)):
+        result=run_gateway_comparison(cfg,start_tu=float(start),
+                                      observer_initial_state=state,
+                                      gateway_reference=reference)
+        metrics=comparison_metrics(result)
+        B=state_transform(start,cfg)
+        offset=B@(state-np.asarray(cfg['orbit']['state']))
+        departure=float(np.linalg.norm(offset[:3]))
+        ranges=np.linalg.norm(
+            (result['truth'][:,:3]-result['gateway_truth'][:,:3])*cfg['length_unit_km'],
+            axis=1)
+        for name in ['perfect','lso_estimated']:
+            item=metrics[name]
+            position=item['position_rmse_km']
+            if name not in baselines:
+                baselines[name]=position
+            change=100*(position/baselines[name]-1) if baselines[name]>0 else float('nan')
+            rows.append(dict(
+                observer_period=k+1,
+                observer_departure_km=departure,
+                case=name,
+                gateway_observations=int(result['gateway_available'].sum()),
+                lso_observations=int(result['sensor_visible'].sum()),
+                mean_gateway_range_km=float(np.mean(ranges)),
+                position_rmse_km=float(position),
+                velocity_rmse_m_s=float(item['velocity_rmse_m_s']),
+                final_position_forecast_rss_sigma_km=float(
+                    item['position_forecast_rss_sigma_km'][-1]),
+                position_rmse_change_pct=float(change)))
+    return dict(rows=rows,reference_closure=reference.closure(),
+                observer_period_tu=observer_period,
+                tracking_window_tu=reference.period)
+
+
+def save_gateway_period_study(study, directory):
+    """Save comparable per-observer-period Gateway tracking results."""
+    directory=Path(directory)
+    directory.mkdir(parents=True,exist_ok=True)
+    with (directory/'gateway_period_metrics.csv').open('w',newline='') as handle:
+        writer=csv.DictWriter(handle,fieldnames=list(study['rows'][0]))
+        writer.writeheader()
+        writer.writerows(study['rows'])
+    (directory/'gateway_period_summary.json').write_text(
+        json.dumps(dict(reference_closure=study['reference_closure'],
+                        observer_period_tu=study['observer_period_tu'],
+                        tracking_window_tu=study['tracking_window_tu'],
+                        interpretation=('Each independent tracking window lasts one Gateway orbit, '
+                                        'starts at an observer-period boundary, and uses the same '
+                                        'Gateway prior and repeated nominal orbit. Positive RMSE '
+                                        'change indicates degradation relative to period 1; '
+                                        'RMSE represents one noise realization.')),indent=2)+'\n')

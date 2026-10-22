@@ -4,7 +4,8 @@ import numpy as np
 from numpy.testing import assert_allclose
 from halo_tracking.study import load_config
 from halo_tracking.dynamics import propagate
-from halo_tracking.gateway_comparison import spacecraft_measurement,spacecraft_jacobians,_filter
+from halo_tracking.gateway_comparison import spacecraft_measurement,spacecraft_jacobians,_filter,run_gateway_comparison,run_gateway_period_study,save_gateway_period_study
+from halo_tracking.gateway_reference import GatewayReference
 from halo_tracking.estimation import run_ekf
 from halo_tracking.measurements import predict,wrap
 
@@ -51,3 +52,30 @@ def test_gateway_measurements_do_not_refine_observer():
     for Po,Pog,Pg in zip(considered['observer_covariance'],considered['observer_gateway_covariance'],considered['covariance']):
         full=np.block([[Po,Pog],[Pog.T,Pg]])
         assert np.linalg.eigvalsh(full).min()>-1e-20
+
+
+def test_gateway_reference_repeats_and_closes():
+    cfg=load_config()
+    reference=GatewayReference(cfg)
+    assert reference.position_closure_km < .001
+    assert reference.velocity_closure_m_s < .001
+    phase=np.array([.1,.7,1.2])
+    assert_allclose(reference.states(phase),reference.states(phase+reference.period),
+                    atol=1e-13,rtol=1e-12)
+    assert_allclose(reference.states([0])[0],cfg['gateway']['state'],atol=1e-13)
+
+
+def test_gateway_period_comparison_is_standardized(tmp_path):
+    cfg=load_config()
+    cfg['simulation']['cadence_s']=21600.
+    study=run_gateway_period_study(cfg,periods=2)
+    rows=study['rows']
+    assert len(rows)==4
+    assert [row['observer_period'] for row in rows]==[1,1,2,2]
+    assert [row['case'] for row in rows]==['perfect','lso_estimated']*2
+    assert np.isclose(study['tracking_window_tu'],cfg['gateway']['period_tu'])
+    assert rows[0]['position_rmse_change_pct']==0.
+    assert rows[2]['observer_departure_km']>0.
+    assert all(np.isfinite(row['position_rmse_km']) for row in rows)
+    save_gateway_period_study(study,tmp_path)
+    assert (tmp_path/'gateway_period_metrics.csv').is_file()

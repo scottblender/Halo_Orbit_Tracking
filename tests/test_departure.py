@@ -28,6 +28,7 @@ def test_period_trajectory_figures():
     figures=period_trajectory_figures(result,cfg)
     assert list(figures)==['period_01_trajectory','period_02_trajectory']
     for figure in figures.values():
-        assert len(figure.axes)==3
+        assert len(figure.axes)==1
+        assert figure.axes[0].name=='3d'
         assert len(figure.axes[0].lines)==1
         plt.close(figure)
