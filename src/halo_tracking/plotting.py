@@ -203,10 +203,11 @@ def departure_figures(result, cfg):
 
 
 def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
-    """Make a legible 20-period grid with shared view and annotated departure.
+    """Display increasing cumulative propagation horizons from the SAME start.
 
-    Local scale makes later escaped/degenerate arcs visible. Reference scale
-    also exports a fixed-axis comparison; escaped arcs are intentionally clipped.
+    Panel k plots [0,k*T] of one uninterrupted CR3BP integration, not the
+    isolated kth period. Local axes show escaped trajectories; reference
+    axes preserve nominal scale for comparison.
     """
     style()
     if scale_mode not in ('local', 'reference'):
@@ -230,8 +231,8 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
     for i in range(count):
         ax = fig.add_subplot(rows, cols, i+1, projection='3d')
         ax.set_proj_type('ortho')
-        actual = trajectory[i*n:(i+1)*n+1]
-        departure = result['position_departure_km'][i*n:(i+1)*n+1]
+        actual = trajectory[:(i+1)*n+1]
+        departure = result['position_departure_km'][:(i+1)*n+1]
         if scale_mode == 'reference':
             center, half = nominal_center, nominal_half
         else:
@@ -257,7 +258,7 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
         for axis in [ax.xaxis, ax.yaxis, ax.zaxis]:
             axis.pane.set_facecolor((.98, .98, .98, .25))
             axis.pane.set_edgecolor((.82, .84, .86, .4))
-        ax.set_title(f'Period {i+1:02d}', fontsize=11, fontweight='bold', pad=0)
+        ax.set_title(f'0 → {i+1}T', fontsize=12, fontweight='bold', pad=0)
         maximum = float(np.nanmax(departure))
         if maximum < 1000:
             label = f'Max departure: {maximum:.0f} km'
@@ -267,17 +268,17 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
             label = f'Max departure: {maximum/1e6:.2f}M km'
         ax.text2D(.5, -.04, label, transform=ax.transAxes,
                   ha='center', va='top', fontsize=9, color='#40464e')
-    fig.suptitle('Uncontrolled halo observer — consecutive orbital periods',
+    fig.suptitle('Uncontrolled halo observer — cumulative propagation horizons',
                  y=.987, fontsize=17, fontweight='bold')
-    subtitle = ('Each panel auto-scaled; span and shape reveal escape'
+    subtitle = ('All panels begin at the same initial state; axes auto-scale'
                 if scale_mode == 'local' else
-                'Fixed nominal-orbit scale; escaped segments are clipped')
+                'All panels begin at the same initial state; fixed nominal scale may clip escaped arcs')
     fig.text(.5, .952,
              subtitle + '  |  Moon-centered rotating coordinates (km)',
              ha='center', fontsize=11, color='#40464e')
     handles = [legend[k] for k in ('Reference', 'Uncontrolled',
                                   'Period start', 'Period end')]
-    fig.legend(handles, ['First-period reference', 'Uncontrolled trajectory',
+    fig.legend(handles, ['Repeating first-period reference', 'Trajectory: 0 → kT',
                          'Start', 'End'],
                loc='lower center', bbox_to_anchor=(.5, .018),
                ncol=4, frameon=False, fontsize=11)
