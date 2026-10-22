@@ -1,6 +1,6 @@
 {
   "mu": 0.01215058560962404,
-  "length_unit_km": 384400.0,
+  "length_unit_km": 384400,
   "time_unit_s": 375190.25852,
   "orbit": {
     "catalog_id": 241,
@@ -19,24 +19,24 @@
     "source_precision": "four decimal places; not a corrected periodic solution"
   },
   "site": {
-    "latitude_deg": 30.0,
-    "longitude_east_deg": 270.0,
+    "latitude_deg": 30,
+    "longitude_east_deg": 270,
     "radius_km": 1737.4,
     "prime_meridian_phase_rad": 3.141592653589793,
-    "minimum_elevation_deg": 10.0
+    "minimum_elevation_deg": 10
   },
   "simulation": {
-    "periods": 1.0,
-    "cadence_s": 1800.0,
+    "periods": 1,
+    "cadence_s": 1800,
     "seed": 241
   },
   "estimation": {
-    "initial_position_sigma_km": 1.0,
-    "initial_velocity_sigma_km_s": 1e-05,
-    "acceleration_psd_normalized": 0.0
+    "initial_position_sigma_km": 1,
+    "initial_velocity_sigma_km_s": 0.00001,
+    "acceleration_psd_normalized": 0
   },
   "measurement": {
-    "angle_sigma_arcsec": 1.0,
+    "angle_sigma_arcsec": 1,
     "angular_rate_sigma_arcsec_s": 0.01,
     "rate_source": "independent",
     "covariance_override": null
@@ -53,29 +53,29 @@
     ],
     "period_tu": 1.51110546287394,
     "source": "https://github.com/scottblender/Gradient-Free-Optimization-for-Cislunar-SDA-2/blob/main/scripts/build_target_case_database.m",
-    "reference_time_unit_s": 375695.0,
+    "reference_time_unit_s": 375695,
     "phase_assumption": "Both supplied normalized states define phase zero at the model t=0; no mission epoch is implied."
   },
   "comparison": {
-    "gateway_position_sigma_km": 1.0,
-    "gateway_velocity_sigma_km_s": 1e-05,
-    "gateway_camera_sigma_arcsec": 1.0
+    "gateway_position_sigma_km": 1,
+    "gateway_velocity_sigma_km_s": 0.00001,
+    "gateway_camera_sigma_arcsec": 1
   },
   "sensors": [
     {
       "name": "North 270",
-      "latitude_deg": 30.0,
-      "longitude_east_deg": 270.0
+      "latitude_deg": 30,
+      "longitude_east_deg": 270
     },
     {
       "name": "North 90",
-      "latitude_deg": 30.0,
-      "longitude_east_deg": 90.0
+      "latitude_deg": 30,
+      "longitude_east_deg": 90
     },
     {
       "name": "South 90",
-      "latitude_deg": -85.0,
-      "longitude_east_deg": 90.0
+      "latitude_deg": -85,
+      "longitude_east_deg": 90
     }
   ],
   "identification": {
@@ -83,7 +83,12 @@
     "validation_arcs": 5,
     "test_arcs": 5,
     "seed": 1022,
-    "position_spread_km": 1.0,
+    "position_spread_km": 1,
     "velocity_spread_m_s": 0.01
+  },
+  "optics": {
+    "lso_max_range_km": 250000,
+    "gateway_max_range_km": 250000,
+    "range_limit_note": "Illustrative hard optical slant-range gates; not instrument-calibrated detection thresholds. Geometric masks still apply."
   }
 }
