@@ -105,9 +105,25 @@ def _filter(truth, cfg, z_lso, z_gateway, exact_observer, nominal=False):
 
 
 def run_gateway_comparison(cfg, start_tu=0., observer_initial_state=None,
-                           gateway_reference=None, duration_periods=1):
-    """Compare tracking over selected observer periods without resetting filters."""
+                           gateway_reference=None, duration_periods=1,
+                           gateway_truth_acceleration_m_s2=0.,
+                           gateway_measurement_cutoff_tu=None):
+    """Compare Gateway EKFs against selectable ideal or perturbed truth.
+
+    The estimator always propagates unforced CR3BP. If nonzero, the physical
+    Gateway truth receives a constant MCI inertial acceleration, expressed in
+    physical m/s^2 and rotated into the CR3BP rotating frame at each epoch.
+    An optional observation cutoff rejects Gateway angles after that epoch;
+    LSO observations and both estimator states/covariances continue normally.
+    """
     cfg=deepcopy(cfg)
+    strength = float(gateway_truth_acceleration_m_s2)
+    if not np.isfinite(strength) or strength < 0:
+        raise ValueError('Unmodeled acceleration must be finite and nonnegative')
+    if (gateway_measurement_cutoff_tu is not None and
+            (not np.isfinite(gateway_measurement_cutoff_tu) or
+             gateway_measurement_cutoff_tu < start_tu)):
+        raise ValueError('Gateway observation cutoff must follow start time')
     if cfg['gateway'].get('state') is None:
         raise ValueError('Gateway reference state is required')
     reference = gateway_reference if gateway_reference is not None else GatewayReference(cfg)
@@ -132,12 +148,39 @@ def run_gateway_comparison(cfg, start_tu=0., observer_initial_state=None,
         truth=dict(times=times,truth=observer,elevation=elev,
                    visible=elev>=np.deg2rad(cfg['site']['minimum_elevation_deg']))
     truth['config']=cfg
-    truth['gateway_truth']=reference.states(times)
+    if strength:
+        # A deterministic, fixed-MCI direction avoids random forcing and
+        # makes the mismatch reproducible. This is a sensitivity case, not a
+        # calibrated solar-radiation-pressure or station-keeping model.
+        direction = np.asarray(cfg.get('gateway_truth_disturbance', {}).get(
+            'direction_mci', [1., 0.3, -0.2]), dtype=float)
+        if direction.shape != (3,) or not np.all(np.isfinite(direction)) or np.linalg.norm(direction) == 0:
+            raise ValueError('Gateway disturbance direction must be a nonzero finite 3-vector')
+        direction = direction/np.linalg.norm(direction)
+        scaled = strength*cfg['time_unit_s']**2/(1000*cfg['length_unit_km'])
+        def forced_rhs(t, x):
+            dx = rhs(t, x, cfg['mu'])
+            dx[3:] += rotation(t).T @ (scaled*direction)
+            return dx
+        sol = solve_ivp(forced_rhs, (0., float(times[-1])),
+                        np.asarray(reference.initial, dtype=float),
+                        method='DOP853', t_eval=times, rtol=2e-11, atol=2e-13)
+        if not sol.success:
+            raise RuntimeError('Gateway forced-truth propagation: '+sol.message)
+        truth['gateway_truth'] = sol.y.T
+    else:
+        truth['gateway_truth'] = reference.states(times)
+    truth['gateway_truth_acceleration_m_s2'] = strength
+    truth['gateway_measurement_cutoff_tu'] = gateway_measurement_cutoff_tu
     truth['gateway_reference_closure']=reference.closure()
     dt=cfg['simulation']['cadence_s']/cfg['time_unit_s']
     scheduled=np.isclose(times/dt,np.rint(times/dt),rtol=0,atol=1e-9)
     truth['lso_available']=truth['visible']&scheduled
-    truth['gateway_available']=np.array([gateway_visible(o,g,cfg,t) for t,o,g in zip(times,truth['truth'],truth['gateway_truth'])])&scheduled
+    truth['gateway_available']=np.array([
+        gateway_visible(o,g,cfg,t) for t,o,g in
+        zip(times,truth['truth'],truth['gateway_truth'])]) & scheduled
+    if gateway_measurement_cutoff_tu is not None:
+        truth['gateway_available'] &= times <= gateway_measurement_cutoff_tu + 1e-10
     network = observations(times, truth['truth'], cfg, cfg['simulation']['seed']+30)
     truth.update(network)
     truth['lso_available'] = network['sensor_visible'].any(axis=1)
