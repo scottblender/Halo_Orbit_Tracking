@@ -6,7 +6,6 @@ from halo_tracking.study import load_config
 from halo_tracking.dynamics import propagate
 from halo_tracking.gateway_comparison import spacecraft_measurement,spacecraft_jacobians,_filter,run_gateway_comparison,run_gateway_period_study,save_gateway_period_study,load_gateway_period_study
 from halo_tracking.gateway_reference import GatewayReference
-from halo_tracking.orbit_reference import correct_halo_reference
 from halo_tracking.estimation import run_ekf
 from halo_tracking.measurements import predict,wrap
 
@@ -72,19 +71,35 @@ def test_gateway_period_comparison_is_standardized(tmp_path):
     study=run_gateway_period_study(cfg,periods=2)
     rows=study['rows']
     assert len(rows)==4
-    assert [row['observer_period'] for row in rows]==[1,1,2,2]
+    assert [row['horizon_periods'] for row in rows]==[1,1,2,2]
     assert [row['case'] for row in rows]==['perfect','lso_estimated']*2
-    assert study['method']=='continuous_rounded_reference_keepout_v2'
+    assert study['method']=='continuous_cumulative_horizon_keepout_v3'
     assert study['observer_period_tu']==study['tracking_window_tu']
     assert np.isclose(study['tracking_window_tu'],cfg['orbit']['period_tu'])
-    assert rows[0]['position_rmse_change_pct']==0.
-    assert rows[2]['observer_departure_km']>0.
+    # No per-period percentage change column; RMSE now aggregates from t=0.
+    assert rows[2]['terminal_observer_departure_km']>0.
+    assert rows[0]['terminal_observer_departure_km'] > 50.
+    assert rows[0]['max_observer_departure_km'] >= 0.
+    assert rows[2]['max_observer_departure_km'] >= rows[0]['max_observer_departure_km']
+    assert rows[2]['gateway_observations'] >= rows[0]['gateway_observations']
+    assert rows[2]['lso_observations'] >= rows[0]['lso_observations']
+    assert (rows[2]['new_gateway_observations'] ==
+            rows[2]['gateway_observations']-rows[0]['gateway_observations'])
+    assert (rows[2]['new_lso_observations'] ==
+            rows[2]['lso_observations']-rows[0]['lso_observations'])
+    assert rows[0]['terminal_gateway_range_km'] > 0
+    assert rows[2]['terminal_gateway_range_km'] > 0
+    # Endpoint departure and relative Gateway range measure different geometries.
+    assert not np.isclose(rows[2]['terminal_observer_departure_km'],
+                          rows[2]['terminal_gateway_range_km'])
     assert all(np.isfinite(row['position_rmse_km']) for row in rows)
     save_gateway_period_study(study,tmp_path)
     assert (tmp_path/'gateway_period_metrics.csv').is_file()
     saved=load_gateway_period_study(cfg,tmp_path,periods=2)
     assert saved is not None and len(saved['rows'])==4
     assert saved['rows'][0]['position_rmse_km']==rows[0]['position_rmse_km']
+    assert saved['rows'][2]['horizon_periods']==2
+    assert saved['rows'][2]['terminal_gateway_range_km']==rows[2]['terminal_gateway_range_km']
     assert load_gateway_period_study(cfg,tmp_path,periods=3) is None
     altered=deepcopy(cfg)
     altered['measurement']['angle_sigma_arcsec']=2.
