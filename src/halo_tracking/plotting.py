@@ -286,3 +286,56 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
     fig.subplots_adjust(left=.025, right=.975, top=.928, bottom=.075,
                         wspace=.03, hspace=.28)
     return fig
+
+
+def gateway_prediction_figure(study):
+    """Show true error, recent RMSE, and observation age after loss of tracking."""
+    style()
+    h = study['histories']
+    meta = study['summary']
+    days = h['elapsed_days']
+    cutoff = meta['blackout_elapsed_days']
+    colors = {'perfect': '#245b80', 'lso_estimated': '#ca7139'}
+    labels = {'perfect': 'Exact observer state',
+              'lso_estimated': 'LSO-estimated observer state'}
+    fig, axes = plt.subplots(3, 1, figsize=(11.8, 9.1),
+                             sharex=True, layout='constrained')
+    ax = axes[0]
+    for name in ('perfect', 'lso_estimated'):
+        ax.semilogy(days, np.maximum(h[name+'_position_error_km'], 1e-6),
+                    color=colors[name], label=labels[name])
+        ax.semilogy(days, np.maximum(h[name+'_filter_position_sigma_km'], 1e-6),
+                    color=colors[name], alpha=.48, ls=':',
+                    label=labels[name]+' conditional RSS σ')
+    for limit in meta['thresholds_km']:
+        ax.axhline(limit, color='gray', lw=.65, ls='--', alpha=.42)
+    ax.set_ylabel('Instantaneous Gateway error (km)')
+    ax.legend(loc='upper left', fontsize=8, ncol=2)
+
+    ax = axes[1]
+    for name in ('perfect', 'lso_estimated'):
+        ax.semilogy(days, np.maximum(h[name+'_rolling_position_rmse_km'], 1e-6),
+                    color=colors[name], label=labels[name])
+    ax.set_ylabel(f"Rolling {meta['rolling_window_days']:g}-day RMSE (km)")
+    ax.legend(loc='upper left', fontsize=9)
+
+    ax = axes[2]
+    age = h['time_since_gateway_observation_days']
+    ax.plot(days, age, color='#363e49', lw=1.7,
+            label='Elapsed days since last Gateway observation')
+    accepted = h['gateway_available'].astype(bool)
+    ax.scatter(days[accepted], np.zeros(accepted.sum()), color='#14866f',
+               marker='|', s=15, label='Gateway measurements')
+    ax.set_ylabel('Observation age (days)')
+    ax.set_xlabel('Elapsed simulation time (days)')
+    ax.legend(loc='upper left', fontsize=9)
+
+    for panel in axes:
+        panel.axvspan(cutoff, days[-1], color='#b87a62', alpha=.08)
+        panel.axvline(cutoff, color='#a34f3f', ls='--', lw=1.25)
+        panel.grid(alpha=.17)
+    axes[0].set_title('Gateway blind-prediction endurance — perturbed truth, unforced EKF',
+                      fontweight='bold', fontsize=13)
+    fig.text(.99, .985, f'Blackout after {meta["blackout_period"]} nominal observer periods',
+             ha='right', va='top', fontsize=9)
+    return fig
