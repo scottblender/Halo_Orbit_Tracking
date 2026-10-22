@@ -74,9 +74,9 @@ def test_gateway_period_comparison_is_standardized(tmp_path):
     assert len(rows)==4
     assert [row['observer_period'] for row in rows]==[1,1,2,2]
     assert [row['case'] for row in rows]==['perfect','lso_estimated']*2
-    assert study['method']=='continuous_corrected_reference_v1'
+    assert study['method']=='continuous_rounded_reference_keepout_v2'
     assert study['observer_period_tu']==study['tracking_window_tu']
-    assert np.isclose(study['tracking_window_tu'],correct_halo_reference(cfg)['orbit']['period_tu'])
+    assert np.isclose(study['tracking_window_tu'],cfg['orbit']['period_tu'])
     assert rows[0]['position_rmse_change_pct']==0.
     assert rows[2]['observer_departure_km']>0.
     assert all(np.isfinite(row['position_rmse_km']) for row in rows)
