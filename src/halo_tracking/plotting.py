@@ -161,7 +161,7 @@ def state_histories(result, body):
 def departure_figures(result, cfg):
     """Show instantaneous departure and equal-phase period RMS growth."""
     style()
-    periods = result['times']/cfg['orbit']['period_tu']
+    periods = result['times']/result['diagnostics']['nominal_period_tu']
     figures = {}
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, layout='constrained')
     for ax, key, label in zip(axes, ['position_departure_km','velocity_departure_m_s'],
