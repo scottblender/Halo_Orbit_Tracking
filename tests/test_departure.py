@@ -31,8 +31,15 @@ def test_period_trajectory_grid():
     assert all(len(axis.lines)==2 for axis in figure.axes)
     assert not figure.axes[0].get_xticklabels()
     assert not figure.axes[1].get_xticklabels()
-    assert 'Period 01' in figure.axes[0].get_title()
-    assert 'Period 02' in figure.axes[1].get_title()
+    assert '0 → 1T' in figure.axes[0].get_title()
+    assert '0 → 2T' in figure.axes[1].get_title()
+    # Each grid subplot depicts cumulative 0-to-kT motion:
+    # 21 samples at T, and 41 samples at 2T.
+    assert len(figure.axes[0].lines[1].get_data_3d()[0]) == 21
+    assert len(figure.axes[1].lines[1].get_data_3d()[0]) == 41
+    np.testing.assert_allclose(
+        np.array([axis[0] for axis in figure.axes[0].lines[1].get_data_3d()]),
+        np.array([axis[0] for axis in figure.axes[1].lines[1].get_data_3d()]))
     plt.close(figure)
     fixed=period_trajectory_grid(result,cfg,scale_mode='reference')
     for attr in ['get_xlim3d','get_ylim3d','get_zlim3d']:
