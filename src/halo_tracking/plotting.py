@@ -159,31 +159,56 @@ def state_histories(result, body):
 
 
 def departure_figures(result, cfg):
-    """Show instantaneous departure and equal-phase cycle RMS growth."""
+    """Show departure and equal-phase per-period RMS growth."""
     style()
-    periods = result['times']/cfg['orbit']['period_tu']
+    elapsed = result['times']/cfg['orbit']['period_tu']
     figures = {}
-    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, layout='constrained')
-    for ax, key, label in zip(axes, ['position_departure_km','velocity_departure_m_s'],
-                             ['Position departure (km)', 'Velocity departure (m/s)']):
-        values = result[key].copy()
-        # The first traversal is the reference, so suppress numerical near-zero differences.
-        values[periods < 1] = np.nan
-        ax.semilogy(periods, np.maximum(values, 1e-12), color='#245b80')
-        for k in range(1, result['diagnostics']['periods']+1):
-            ax.axvline(k, color='0.7', lw=.5, alpha=.4)
-        ax.set_ylabel(label); ax.grid(axis='y', alpha=.2)
+    fig, axes = plt.subplots(2,1,figsize=(10,7),sharex=True,layout='constrained')
+    for ax,key,label in zip(axes,['position_departure_km','velocity_departure_m_s'],
+                            ['Position departure (km)','Velocity departure (m/s)']):
+        values=result[key].copy()
+        values[elapsed<1]=np.nan
+        ax.semilogy(elapsed,np.maximum(values,1e-12),color='#245b80')
+        for k in range(1,result['diagnostics']['periods']+1):
+            ax.axvline(k,color='0.7',lw=.5,alpha=.4)
+        ax.set_ylabel(label);ax.grid(axis='y',alpha=.2)
     axes[-1].set_xlabel('Elapsed nominal periods')
     fig.suptitle('Uncontrolled departure from the repeated one-period reference')
-    figures['departure'] = fig
-    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, layout='constrained')
-    cycles = np.arange(1, len(result['cycle_position_rms_km'])+1)
-    for ax, key, label in zip(axes, ['cycle_position_rms_km','cycle_velocity_rms_m_s'],
-                             ['Cycle RMS position departure (km)', 'Cycle RMS velocity departure (m/s)']):
-        ax.semilogy(cycles[1:], result[key][1:], 'o-', color='#ca7139', ms=4)
-        ax.set_ylabel(label); ax.grid(alpha=.2)
-    axes[-1].set_xlabel('Cycle number (equal orbital-phase samples)')
-    axes[-1].set_xticks(np.arange(2, len(cycles)+1, 2))
-    fig.suptitle('Growth across cycles — first reference traversal excluded')
-    figures['cycle_growth'] = fig
+    figures['departure']=fig
+    fig,axes=plt.subplots(2,1,figsize=(10,7),sharex=True,layout='constrained')
+    indices=np.arange(1,len(result['period_position_rms_km'])+1)
+    for ax,key,label in zip(axes,['period_position_rms_km','period_velocity_rms_m_s'],
+                            ['Per-period RMS position departure (km)','Per-period RMS velocity departure (m/s)']):
+        ax.semilogy(indices[1:],result[key][1:],'o-',color='#ca7139',ms=4)
+        ax.set_ylabel(label);ax.grid(alpha=.2)
+    axes[-1].set_xlabel('Period number (equal orbital-phase samples)')
+    axes[-1].set_xticks(np.arange(2,len(indices)+1,2))
+    fig.suptitle('Growth across periods — reference period excluded')
+    figures['period_growth']=fig
+    return figures
+
+
+def period_trajectory_figures(result,cfg):
+    """Compare the complete reference arc with each period in rotating coordinates."""
+    style()
+    n=result['diagnostics']['samples_per_period']
+    count=result['diagnostics']['periods']
+    moon=np.array([1-cfg['mu'],0.,0.])
+    L=cfg['length_unit_km']
+    reference=(result['reference_period_states'][:,:3]-moon)*L
+    views=[('x','y',0,1),('x','z',0,2),('y','z',1,2)]
+    figures={}
+    for period in range(count):
+        actual=(result['states'][period*n:(period+1)*n+1,:3]-moon)*L
+        fig,axes=plt.subplots(1,3,figsize=(13.2,4.4),layout='constrained')
+        for ax,(a,b,i,j) in zip(axes,views):
+            ax.plot(reference[:,i],reference[:,j],'--',color='#777777',label='One-period reference')
+            ax.plot(actual[:,i],actual[:,j],color='#245b80',label='Uncontrolled trajectory')
+            ax.scatter(actual[0,i],actual[0,j],marker='o',color='#245b80',s=24)
+            ax.scatter(actual[-1,i],actual[-1,j],marker='x',color='#ca7139',s=35)
+            ax.set(xlabel=f'{a} (km)',ylabel=f'{b} (km)',title=f'{a}–{b} projection')
+            ax.set_aspect('equal',adjustable='box');ax.grid(alpha=.2)
+        axes[0].legend(loc='best',fontsize=9)
+        fig.suptitle(f'Uncontrolled halo trajectory — period {period+1} of {count} (Moon-centered rotating)')
+        figures[f'period_{period+1:02d}_trajectory']=fig
     return figures
