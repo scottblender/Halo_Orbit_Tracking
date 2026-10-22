@@ -167,8 +167,8 @@ def departure_figures(result, cfg):
     for ax, key, label in zip(axes, ['position_departure_km','velocity_departure_m_s'],
                              ['Position departure (km)', 'Velocity departure (m/s)']):
         values = result[key].copy()
-        # The first traversal is the reference, so suppress numerical near-zero differences.
-        values[periods < 1] = np.nan
+        # The true initial state differs from the corrected nominal reference,
+        # so first-period departure is meaningful and remains visible.
         ax.semilogy(periods, np.maximum(values, 1e-12), color='#245b80',
                     label='Unperturbed numerical trajectory')
         ensemble_key = ('ensemble_position_departure_km' if 'position_' in key
@@ -187,17 +187,17 @@ def departure_figures(result, cfg):
             ax.axvline(k, color='0.7', lw=.5, alpha=.4)
         ax.set_ylabel(label); ax.grid(axis='y', alpha=.2)
     axes[-1].set_xlabel('Elapsed nominal periods')
-    fig.suptitle('Uncontrolled departure from the repeated one-period reference')
+    fig.suptitle('Uncontrolled rounded seed vs corrected periodic nominal reference')
     figures['departure'] = fig
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, layout='constrained')
     periods = np.arange(1, len(result['period_position_rms_km'])+1)
     for ax, key, label in zip(axes, ['period_position_rms_km','period_velocity_rms_m_s'],
                              ['Period RMS position departure (km)', 'Period RMS velocity departure (m/s)']):
-        ax.semilogy(periods[1:], result[key][1:], 'o-', color='#ca7139', ms=4)
+        ax.semilogy(periods, result[key], 'o-', color='#ca7139', ms=4)
         ax.set_ylabel(label); ax.grid(alpha=.2)
     axes[-1].set_xlabel('Period number (equal orbital-phase samples)')
     axes[-1].set_xticks(np.arange(2, len(periods)+1, 2))
-    fig.suptitle('Growth across periods — first reference traversal excluded')
+    fig.suptitle('Growth against the corrected periodic reference')
     figures['period_growth'] = fig
     return figures
 
@@ -221,7 +221,7 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
     moon = np.array([1-cfg['mu'], 0., 0.])
     L = cfg['length_unit_km']
     trajectory = (result['states'][:, :3]-moon)*L
-    reference = trajectory[:n+1]
+    reference = (result['reference_period_states'][:, :3]-moon)*L
     if not np.isfinite(trajectory).all():
         raise ValueError('Nonfinite observer trajectory')
     nominal_center = (reference.min(axis=0)+reference.max(axis=0))/2
@@ -232,6 +232,7 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
         ax = fig.add_subplot(rows, cols, i+1, projection='3d')
         ax.set_proj_type('ortho')
         actual = trajectory[:(i+1)*n+1]
+        repeated_nominal = (result['repeated_reference'][:(i+1)*n+1, :3]-moon)*L
         departure = result['position_departure_km'][:(i+1)*n+1]
         if scale_mode == 'reference':
             center, half = nominal_center, nominal_half
@@ -239,7 +240,7 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
             bounds = np.vstack((reference, actual))
             center = (bounds.min(axis=0)+bounds.max(axis=0))/2
             half = max(np.ptp(bounds, axis=0).max()/2, 1.)*1.14
-        legend['Reference'] = ax.plot(*reference.T, color='#999999',
+        legend['Reference'] = ax.plot(*repeated_nominal.T, color='#999999',
                                       lw=.95, ls='--')[0]
         legend['Uncontrolled'] = ax.plot(*actual.T, color='#245b80',
                                          lw=1.65)[0]
@@ -268,7 +269,7 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
             label = f'Max departure: {maximum/1e6:.2f}M km'
         ax.text2D(.5, -.04, label, transform=ax.transAxes,
                   ha='center', va='top', fontsize=9, color='#40464e')
-    fig.suptitle('Uncontrolled halo observer — cumulative propagation horizons',
+    fig.suptitle('Uncontrolled rounded halo observer — cumulative propagation horizons',
                  y=.987, fontsize=17, fontweight='bold')
     subtitle = ('All panels begin at the same initial state; axes auto-scale'
                 if scale_mode == 'local' else
@@ -278,7 +279,7 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
              ha='center', fontsize=11, color='#40464e')
     handles = [legend[k] for k in ('Reference', 'Uncontrolled',
                                   'Period start', 'Period end')]
-    fig.legend(handles, ['Repeating first-period reference', 'Trajectory: 0 → kT',
+    fig.legend(handles, ['Corrected periodic nominal reference', 'Trajectory: 0 → kT',
                          'Start', 'End'],
                loc='lower center', bbox_to_anchor=(.5, .018),
                ncol=4, frameon=False, fontsize=11)
