@@ -52,8 +52,12 @@ def body_clear(observer, target, center, radius, exclusion_deg=0.):
         occultation = np.arccos(np.clip(c, -1., 1.))
     else:
         occultation = np.arcsin(min(radius/distance, 1.))
+    # Avoid rejecting mathematical equality from acos roundoff (~1e-16 rad).
+    # Only the user-configured boundary receives this floating-point slack;
+    # strict physical tangency remains blocked.
+    configured = np.deg2rad(exclusion_deg)
     return bool(separation > occultation and
-                separation >= np.deg2rad(exclusion_deg))
+                separation + 4*np.finfo(float).eps >= configured)
 
 
 def optical_visible(observer, target, time_tu, cfg, link='gateway'):
