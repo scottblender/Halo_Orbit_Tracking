@@ -27,14 +27,6 @@ def observations(times, states, cfg, seed):
     dt = cfg['simulation']['cadence_s']/cfg['time_unit_s']
     scheduled = np.isclose(times/dt, np.rint(times/dt), rtol=0, atol=1e-9)
     visible = (elev >= np.deg2rad(cfg['site']['minimum_elevation_deg'])) & scheduled[:, None]
-    limit = cfg.get('optics', {}).get('lso_max_range_km')
-    if limit is not None:
-        moon = np.array([1 - cfg['mu'], 0., 0.])
-        for j, local in enumerate(sites):
-            ranges = np.linalg.norm(
-                states[:, :3] - moon - site_rotating(local), axis=1
-            ) * cfg['length_unit_km']
-            visible[:, j] &= ranges <= limit
     for j, local in enumerate(sites):
         station = np.array([1-cfg['mu'], 0., 0.]) + site_rotating(local)
         visible[:, j] &= np.array([
