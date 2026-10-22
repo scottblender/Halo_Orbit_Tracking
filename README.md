@@ -1,6 +1,6 @@
 # Halo observer and Lunar Gateway tracking
 
-Open [the main notebook](notebooks/00_gateway_tracking_comparison.ipynb). It compares Gateway tracking over **one observer period (8.06 days)** using exact observer knowledge versus an observer orbit estimated from a lunar surface observer (LSO).
+Open [the main notebook](notebooks/00_gateway_tracking_comparison.ipynb). It compares Gateway tracking over **one Gateway period (about 6.56 days)** using exact observer knowledge versus an observer orbit estimated from a lunar surface observer (LSO).
 
 Both cases use the same truth trajectories, Gateway prior and noisy Gateway measurements. The notebook includes 3D geometry, position/velocity/acceleration histories for both spacecraft, estimation errors, predicted uncertainty, and a results table with **position and velocity RMSE**.
 
@@ -57,14 +57,4 @@ Initial-condition spreads are 1 km and 0.01 m/s per axis, independently sampled 
 
 ## Uncontrolled orbit departure
 
-The dedicated script propagates **20 observer periods** without maneuvers, exports instantaneous position/velocity departures, per-period RMS departure, and a separate x–y/x–z/y–z trajectory comparison for **each period**. The Gateway optical-tracking EKF comparison also runs continuously for 20 observer periods, providing per-period position/velocity RMSE, predicted RSS uncertainty, and measurement availability for both perfect and LSO-estimated observer cases.
-
-```powershell
-.\.venv\Scripts\python.exe scripts/run_departure_study.py
-# Departure and trajectory figures only, without the longer EKF calculation:
-.\.venv\Scripts\python.exe scripts/run_departure_study.py --skip-gateway
-```
-
-Outputs are saved under `results/departure/`, including `period_departure.csv`, per-period trajectory PNGs, and `gateway_tracking/gateway_period_metrics.csv`. The original Gateway notebook remains a **one-period** experiment.
-
-**Limitation:** The rounded SNRHL2 reference has approximately 99 km closure mismatch after one nominal period, so the departure includes reference resets and phase drift. These outputs alone do not establish chaos or a station-keeping cutoff. Correcting the periodic reference, propagating a 1 km / 0.01 m/s perturbation ensemble, and identifying sustained divergence remain next steps.
+The same notebook compares 20 periods of uncontrolled observer propagation against the repeated one-period CR3BP reference. It exports position/velocity departure, per-period RMS plots, and a separate observer trajectory plot for each period to `results/departure/`. The rounded observer reference has about 99 km closure mismatch; departure includes reference resets and phase drift. This diagnostic does not identify chaos or select a stationkeeping cutoff. Gateway tracking is limited to one nominal Gateway orbit, with no Gateway station-keeping model.

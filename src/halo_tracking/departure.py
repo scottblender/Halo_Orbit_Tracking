@@ -11,7 +11,6 @@ def reference_departure(cfg, periods=20, samples_per_period=500, rtol=2e-11, ato
     """Compare equal-phase states; keep reference resets explicit."""
     if periods < 2 or int(periods) != periods or samples_per_period < 10:
         raise ValueError('Use an integer number of periods >=2 and at least 10 samples per period')
-    periods, samples_per_period = int(periods), int(samples_per_period)
     period = cfg['orbit']['period_tu']
     x0 = np.asarray(cfg['orbit']['state'])
     def integrate(end):
@@ -27,7 +26,6 @@ def reference_departure(cfg, periods=20, samples_per_period=500, rtol=2e-11, ato
     phase = phase_index*period/samples_per_period
     states = trajectory.sol(times).T
     repeated = reference.sol(phase).T
-    reference_period_states = reference.sol(np.linspace(0, period, samples_per_period+1)).T
     delta = states-repeated
     physical = np.array([state_transform(t, cfg)@dx for t, dx in zip(times, delta)])
     position = np.linalg.norm(physical[:, :3], axis=1)
@@ -41,9 +39,8 @@ def reference_departure(cfg, periods=20, samples_per_period=500, rtol=2e-11, ato
         jacobi_range=float(np.ptp([jacobi(x, cfg['mu']) for x in states])),
         periods=int(periods), samples_per_period=int(samples_per_period),
         rtol=rtol, atol=atol,
-        interpretation='Departure from a repeated rounded reference, not a chaos or stability test. Per-period RMS includes accumulated phase drift.')
+        interpretation='Departure from a repeated rounded reference, not a chaos or stability test. Period RMS includes accumulated phase drift.')
     return dict(times=times, states=states, repeated_reference=repeated,
-        reference_period_states=reference_period_states,
         position_departure_km=position, velocity_departure_m_s=velocity,
         period_position_rms_km=prms, period_velocity_rms_m_s=vrms,
         diagnostics=diagnostic)
