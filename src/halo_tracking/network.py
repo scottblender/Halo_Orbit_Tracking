@@ -3,6 +3,7 @@ from copy import deepcopy
 import numpy as np
 from .measurements import predict, wrap, ARCSEC
 from .surface_sensor import elevation, site_rotating
+from .visibility import optical_visible
 
 
 def sensor_configs(cfg):
@@ -34,6 +35,11 @@ def observations(times, states, cfg, seed):
                 states[:, :3] - moon - site_rotating(local), axis=1
             ) * cfg['length_unit_km']
             visible[:, j] &= ranges <= limit
+    for j, local in enumerate(sites):
+        station = np.array([1-cfg['mu'], 0., 0.]) + site_rotating(local)
+        visible[:, j] &= np.array([
+            optical_visible(station, state[:3], t, local, link='lso')
+            for t, state in zip(times, states)], dtype=bool)
     measured = ideal + np.random.default_rng(seed).normal(size=ideal.shape)*cfg['measurement']['angle_sigma_arcsec']*ARCSEC
     measured[:, :, 0] = wrap(measured[:, :, 0])
     measured[~visible] = np.nan
