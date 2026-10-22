@@ -89,6 +89,12 @@
   "optics": {
     "lso_max_range_km": 250000,
     "gateway_max_range_km": 250000,
-    "range_limit_note": "Illustrative hard optical slant-range gates; not instrument-calibrated detection thresholds. Geometric masks still apply."
+    "range_limit_note": "Illustrative target-dependent hard slant-range gates. Reflected-light flux falls with R^-2; the selected 250,000 km cap is a sensitivity assumption, not a universal instrument detection threshold.",
+    "sun_exclusion_deg": 20,
+    "earth_exclusion_deg": 10,
+    "moon_exclusion_deg": 0,
+    "sun_initial_phase_rad": 0,
+    "sun_inclination_deg": 0,
+    "sun_model": "planar bicircular relative motion (fixed initial Sun phase; not SPICE)"
   }
 }
