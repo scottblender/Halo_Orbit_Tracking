@@ -213,9 +213,9 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
         raise ValueError('scale_mode must be local or reference')
     count = int(result['diagnostics']['periods'])
     n = int(result['diagnostics']['samples_per_period'])
-    if count < 1 or not 1 <= columns <= count:
+    if count < 1 or columns < 1 or int(columns) != columns:
         raise ValueError('Invalid grid dimensions')
-    cols = int(columns)
+    cols = min(int(columns), count)
     rows = int(np.ceil(count/cols))
     moon = np.array([1-cfg['mu'], 0., 0.])
     L = cfg['length_unit_km']
