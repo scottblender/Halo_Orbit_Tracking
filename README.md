@@ -100,6 +100,51 @@ Cumulative-metric caches use method identifier
 `continuous_nominal_reference_cumulative_v4`; stale v3 and earlier CSVs
 are rejected automatically.
 
+## Gateway prediction endurance with imperfect dynamics
+
+The final tracking section of the notebook now includes a reproducible
+**truth-model mismatch** experiment. Gateway's simulated truth is integrated
+continuously under CR3BP plus a constant-direction inertial acceleration of
+`2e-9 m/s²` by default, while the filter **only knows CR3BP**. This is an
+illustrative acceleration, not a measured or mission-calibrated Gateway force
+model. Its vector and amplitude can be changed; zero acceleration retains
+the original exactly repeated Gateway truth trajectory.
+
+To study *how long Gateway can be predicted without new measurements*, the
+experiment imposes a controlled observer-to-Gateway optical blackout after
+**8 corrected nominal observer periods** by default. Earlier measurements
+must still pass range, occultation, Sun 20° and Earth 10° exclusion masks.
+Lunar surface measurements remain available whenever physical masks allow.
+Gateway truth and both EKFs are propagated **continuously** across the cutoff;
+nothing is reinitialized or recentered on truth at a period boundary.
+
+The experiment records and plots:
+- Instantaneous physical Gateway position error for exact-observer and
+  LSO-estimated-observer knowledge.
+- Rolling **24-hour** RMS position error, avoiding dilution of recent
+  prediction errors by earlier accurate periods.
+- Elapsed time since the **last actually accepted Gateway measurement**.
+- Conditional RSS position sigma from each actual EKF covariance. Because
+  the estimator does not model the applied acceleration, its covariance
+  is **not a calibrated coverage or nonlinear error bound**.
+- First time the position error exceeds configurable **1, 10 and 100 km**
+  thresholds after the blackout; thresholds not crossed before the study ends
+  are *right-censored*, not assumed safe forever.
+
+Results are saved separately from the baseline matched-model metrics under
+`results/gateway_prediction/`: `gateway_prediction_histories.npz`,
+`gateway_prediction_horizons.csv`, `gateway_prediction_thresholds.csv`,
+`gateway_prediction_summary.json`, and `blind_prediction_endurance.png`.
+Saved runs are reused only when configuration and all disturbance, threshold,
+and cutoff settings match. These outputs answer a controlled prediction
+endurance question; the chosen outage starts at 8T by **experimental design**
+and is not claimed to be the spacecraft's actual loss-of-visibility epoch.
+
+Set `HALO_GATEWAY_TRUTH_ACCELERATION_M_S2` and
+`HALO_GATEWAY_BLACKOUT_PERIODS` to explore other disturbances and outage
+starts. `HALO_GATEWAY_PERIODS` sets the entire analysis horizon
+(default 20; CI uses 2 and automatically places the cutoff at 1T).
+
 ## Optical visibility assumptions
 
 Both sensor links are screened for geometric slant range, physical Earth/Sun
