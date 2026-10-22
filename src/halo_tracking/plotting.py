@@ -202,53 +202,85 @@ def departure_figures(result, cfg):
     return figures
 
 
-def period_trajectory_grid(result, cfg, columns=5):
-    """Compare all uncontrolled observer periods in one shared-scale 3D grid."""
-    style()
-    count = int(result['diagnostics']['periods'])
-    samples = int(result['diagnostics']['samples_per_period'])
-    if count < 1 or columns < 1:
-        raise ValueError('At least one period and one column are required')
-    columns = min(int(columns), count)
-    rows = int(np.ceil(count / columns))
-    moon = np.array([1 - cfg['mu'], 0., 0.])
-    length = cfg['length_unit_km']
-    all_positions = (result['states'][:, :3] - moon) * length
-    if not np.isfinite(all_positions).all():
-        raise ValueError('Nonfinite observer position in departure trajectory')
-    reference = all_positions[:samples + 1]
-    center = (all_positions.min(axis=0) + all_positions.max(axis=0)) / 2
-    half = max(float(np.ptp(all_positions, axis=0).max()) / 2, 1.) * 1.06
+def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
+    """Make a legible 20-period grid with shared view and annotated departure.
 
-    fig = plt.figure(figsize=(3.7 * columns, 3.45 * rows + .8))
-    for k in range(count):
-        ax = fig.add_subplot(rows, columns, k + 1, projection='3d')
+    Local scale makes later escaped/degenerate arcs visible. Reference scale
+    also exports a fixed-axis comparison; escaped arcs are intentionally clipped.
+    """
+    style()
+    if scale_mode not in ('local', 'reference'):
+        raise ValueError('scale_mode must be local or reference')
+    count = int(result['diagnostics']['periods'])
+    n = int(result['diagnostics']['samples_per_period'])
+    if count < 1 or not 1 <= columns <= count:
+        raise ValueError('Invalid grid dimensions')
+    cols = int(columns)
+    rows = int(np.ceil(count/cols))
+    moon = np.array([1-cfg['mu'], 0., 0.])
+    L = cfg['length_unit_km']
+    trajectory = (result['states'][:, :3]-moon)*L
+    reference = trajectory[:n+1]
+    if not np.isfinite(trajectory).all():
+        raise ValueError('Nonfinite observer trajectory')
+    nominal_center = (reference.min(axis=0)+reference.max(axis=0))/2
+    nominal_half = max(np.ptp(reference, axis=0).max()/2, 1.)*1.14
+    fig = plt.figure(figsize=(19, 14.0), facecolor='white')
+    legend = {}
+    for i in range(count):
+        ax = fig.add_subplot(rows, cols, i+1, projection='3d')
         ax.set_proj_type('ortho')
-        actual = all_positions[k*samples:(k+1)*samples+1]
-        ax.plot(*reference.T, ls='--', color='#9b9b9b', lw=1.0,
-                label='Period 1 reference')
-        ax.plot(*actual.T, color='#245b80', lw=1.3,
-                label='Uncontrolled observer')
-        ax.scatter(*actual[0], s=12, color='#245b80', depthshade=False,
-                   label='Start')
-        ax.scatter(*actual[-1], s=20, color='#ca7139', marker='x',
-                   depthshade=False, label='End')
+        actual = trajectory[i*n:(i+1)*n+1]
+        departure = result['position_departure_km'][i*n:(i+1)*n+1]
+        if scale_mode == 'reference':
+            center, half = nominal_center, nominal_half
+        else:
+            bounds = np.vstack((reference, actual))
+            center = (bounds.min(axis=0)+bounds.max(axis=0))/2
+            half = max(np.ptp(bounds, axis=0).max()/2, 1.)*1.14
+        legend['Reference'] = ax.plot(*reference.T, color='#999999',
+                                      lw=.95, ls='--')[0]
+        legend['Uncontrolled'] = ax.plot(*actual.T, color='#245b80',
+                                         lw=1.65)[0]
+        legend['Period start'] = ax.scatter(*actual[0], s=13,
+                                            color='#128477', depthshade=False)
+        legend['Period end'] = ax.scatter(*actual[-1], s=21, marker='x',
+                                          color='#ca7139', depthshade=False)
         for setter, value in zip(
                 [ax.set_xlim3d, ax.set_ylim3d, ax.set_zlim3d], center):
             setter(value-half, value+half)
         ax.set_box_aspect((1, 1, 1))
-        ax.view_init(elev=22, azim=-52)
-        ax.set_title(f'Period {k + 1}', fontsize=11, fontweight='bold', pad=1)
-        ax.tick_params(axis='both', labelsize=7, pad=0)
-        ax.set_xlabel('x (km)', fontsize=8, labelpad=-1)
-        ax.set_ylabel('y (km)', fontsize=8, labelpad=-1)
-        ax.set_zlabel('z (km)', fontsize=8, labelpad=-1)
-    handles, labels = fig.axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', ncol=4,
-               bbox_to_anchor=(.5, .009), fontsize=10)
-    fig.suptitle('Uncontrolled observer trajectories by nominal period — '
-                 'Moon-centered rotating frame, shared spatial scale',
-                 fontsize=14, fontweight='bold', y=.995)
-    fig.subplots_adjust(left=.015, right=.985, bottom=.065, top=.945,
-                        wspace=.02, hspace=.17)
+        ax.view_init(elev=24, azim=-52)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+        for axis in [ax.xaxis, ax.yaxis, ax.zaxis]:
+            axis.pane.set_facecolor((.98, .98, .98, .25))
+            axis.pane.set_edgecolor((.82, .84, .86, .4))
+        ax.set_title(f'Period {i+1:02d}', fontsize=11, fontweight='bold', pad=0)
+        maximum = float(np.nanmax(departure))
+        if maximum < 1000:
+            label = f'Max departure: {maximum:.0f} km'
+        elif maximum < 1e6:
+            label = f'Max departure: {maximum/1000:.1f}k km'
+        else:
+            label = f'Max departure: {maximum/1e6:.2f}M km'
+        ax.text2D(.5, -.04, label, transform=ax.transAxes,
+                  ha='center', va='top', fontsize=9, color='#40464e')
+    fig.suptitle('Uncontrolled halo observer — consecutive orbital periods',
+                 y=.987, fontsize=17, fontweight='bold')
+    subtitle = ('Each panel auto-scaled; span and shape reveal escape'
+                if scale_mode == 'local' else
+                'Fixed nominal-orbit scale; escaped segments are clipped')
+    fig.text(.5, .952,
+             subtitle + '  |  Moon-centered rotating coordinates (km)',
+             ha='center', fontsize=11, color='#40464e')
+    handles = [legend[k] for k in ('Reference', 'Uncontrolled',
+                                  'Period start', 'Period end')]
+    fig.legend(handles, ['First-period reference', 'Uncontrolled trajectory',
+                         'Start', 'End'],
+               loc='lower center', bbox_to_anchor=(.5, .018),
+               ncol=4, frameon=False, fontsize=11)
+    fig.subplots_adjust(left=.025, right=.975, top=.928, bottom=.075,
+                        wspace=.03, hspace=.28)
     return fig
