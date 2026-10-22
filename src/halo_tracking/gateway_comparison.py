@@ -1,5 +1,6 @@
 """One-period Gateway estimation with exact versus LSO-estimated observer state."""
 from copy import deepcopy
+import csv
 import json
 from pathlib import Path
 import numpy as np
@@ -102,9 +103,11 @@ def _filter(truth, cfg, z_lso, z_gateway, exact_observer, nominal=False):
                 observer_covariance=np.array(observer_covariances),observer_gateway_covariance=np.array(cross))
 
 
-def run_gateway_comparison(cfg):
-    """Run paired estimates and local covariance forecasts over one observer period."""
-    cfg=deepcopy(cfg);cfg['simulation']['periods']=1.
+def run_gateway_comparison(cfg, periods=1):
+    """Run continuously propagated Gateway estimates over observer periods."""
+    if periods < 1 or int(periods) != periods:
+        raise ValueError('periods must be a positive integer')
+    cfg=deepcopy(cfg);cfg['simulation']['periods']=int(periods)
     if cfg['gateway'].get('state') is None:raise ValueError('Gateway reference state is required')
     cfg.setdefault('comparison',dict(gateway_position_sigma_km=1.,gateway_velocity_sigma_km_s=1e-5,gateway_camera_sigma_arcsec=1.))
     truth=make_truth(cfg);times=truth['times'];truth['config']=cfg
@@ -146,10 +149,37 @@ def comparison_metrics(result):
     return out
 
 
+def gateway_period_metrics(result):
+    """Return paired Gateway performance and observation counts per observer period."""
+    cfg=result['config']
+    count=int(cfg['simulation']['periods'])
+    index=np.minimum(np.floor(result['times']/cfg['orbit']['period_tu']+1e-12).astype(int),count-1)
+    metrics=comparison_metrics(result)
+    rows=[]
+    for period in range(count):
+        mask=index==period
+        if not mask.any():
+            raise ValueError('No samples for period '+str(period+1))
+        for name in ['perfect','lso_estimated']:
+            m=metrics[name]
+            def rms(key):
+                return float(np.sqrt(np.mean(m[key][mask]**2)))
+            rows.append(dict(period=period+1,case=name,samples=int(mask.sum()),
+                gateway_observations=int(result['gateway_available'][mask].sum()),
+                lso_observation_epochs=int(result['lso_available'][mask].sum()),
+                lso_observations=int(result['sensor_visible'][mask].sum()),
+                position_rmse_km=rms('position_error_km'),
+                velocity_rmse_m_s=rms('velocity_error_m_s'),
+                position_forecast_rss_sigma_km=rms('position_forecast_rss_sigma_km'),
+                velocity_forecast_rss_sigma_m_s=rms('velocity_forecast_rss_sigma_m_s')))
+    return rows
+
+
 def save_comparison(result,directory):
     """Save paired state/covariance histories and clear numerical conclusions."""
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     metrics=comparison_metrics(result);summary={}
+    period_rows=gateway_period_metrics(result)
     arrays={key:result[key] for key in ['times','truth','gateway_truth','lso_available','gateway_available','sensor_visible','sensor_elevation_rad','ideal_angles_rad','measured_angles_rad']}
     for name in ['perfect','lso_estimated']:
         item=metrics[name]
@@ -158,7 +188,11 @@ def save_comparison(result,directory):
             summary[name]['final_'+key]=float(item[key][-1]);arrays[name+'_'+key]=item[key]
         for run in [name,name+'_forecast']:
             for key,value in result[run].items():arrays[run+'_'+key]=value
-    summary['assumptions']=dict(duration_observer_periods=1.,duration_days=float(result['times'][-1]*result['config']['time_unit_s']/86400),
+    summary['per_period']=period_rows
+    with (directory/'gateway_period_metrics.csv').open('w',newline='') as handle:
+        writer=csv.DictWriter(handle,fieldnames=list(period_rows[0]))
+        writer.writeheader();writer.writerows(period_rows)
+    summary['assumptions']=dict(duration_observer_periods=int(result['config']['simulation']['periods']),duration_days=float(result['times'][-1]*result['config']['time_unit_s']/86400),
         lso_observation_epochs=int(result['lso_available'].sum()),lso_observations=int(result['sensor_visible'].sum()),gateway_observations=int(result['gateway_available'].sum()),
         measurements='Angles only on both optical links',gateway_prior=f"Separate per-axis prior: {result['config']['comparison']['gateway_position_sigma_km']:g} km / {1000*result['config']['comparison']['gateway_velocity_sigma_km_s']:g} m/s",
         interpretation='Forecast covariance is local/linearized; RMSE is one paired noise realization, not ensemble performance. Observer-Gateway cross-covariance is propagated; Gateway data do not refine the observer.')
