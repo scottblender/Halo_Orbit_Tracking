@@ -189,32 +189,53 @@ def departure_figures(result, cfg):
     return figures
 
 
-def period_trajectory_figures(result, cfg):
-    """Plot the observer orbit in 3D for each period."""
+def period_trajectory_grid(result, cfg, columns=5):
+    """Compare all uncontrolled observer periods in one shared-scale 3D grid."""
     style()
-    count = result['diagnostics']['periods']
-    n = result['diagnostics']['samples_per_period']
+    count = int(result['diagnostics']['periods'])
+    samples = int(result['diagnostics']['samples_per_period'])
+    if count < 1 or columns < 1:
+        raise ValueError('At least one period and one column are required')
+    columns = min(int(columns), count)
+    rows = int(np.ceil(count / columns))
     moon = np.array([1 - cfg['mu'], 0., 0.])
     length = cfg['length_unit_km']
-    figures = {}
+    all_positions = (result['states'][:, :3] - moon) * length
+    if not np.isfinite(all_positions).all():
+        raise ValueError('Nonfinite observer position in departure trajectory')
+    reference = all_positions[:samples + 1]
+    center = (all_positions.min(axis=0) + all_positions.max(axis=0)) / 2
+    half = max(float(np.ptp(all_positions, axis=0).max()) / 2, 1.) * 1.06
+
+    fig = plt.figure(figsize=(3.7 * columns, 3.45 * rows + .8))
     for k in range(count):
-        observer = (result['states'][k*n:(k+1)*n+1, :3] - moon) * length
-        fig = plt.figure(figsize=(8.2, 6.8), layout='constrained')
-        ax = fig.add_subplot(projection='3d')
+        ax = fig.add_subplot(rows, columns, k + 1, projection='3d')
         ax.set_proj_type('ortho')
-        ax.plot(*observer.T, color='#245b80', label='Observer orbit')
-        ax.scatter(*observer[0], color='#245b80', s=30, depthshade=False, label='Start')
-        ax.scatter(*observer[-1], color='#ca7139', marker='x', s=44,
+        actual = all_positions[k*samples:(k+1)*samples+1]
+        ax.plot(*reference.T, ls='--', color='#9b9b9b', lw=1.0,
+                label='Period 1 reference')
+        ax.plot(*actual.T, color='#245b80', lw=1.3,
+                label='Uncontrolled observer')
+        ax.scatter(*actual[0], s=12, color='#245b80', depthshade=False,
+                   label='Start')
+        ax.scatter(*actual[-1], s=20, color='#ca7139', marker='x',
                    depthshade=False, label='End')
-        center = (observer.min(axis=0) + observer.max(axis=0)) / 2
-        half = max(np.ptp(observer, axis=0).max()/2, 1.) * 1.06
-        for setter, value in zip([ax.set_xlim3d, ax.set_ylim3d, ax.set_zlim3d], center):
+        for setter, value in zip(
+                [ax.set_xlim3d, ax.set_ylim3d, ax.set_zlim3d], center):
             setter(value-half, value+half)
         ax.set_box_aspect((1, 1, 1))
         ax.view_init(elev=22, azim=-52)
-        ax.set(xlabel='x (km)', ylabel='y (km)', zlabel='z (km)')
-        ax.legend(loc='upper left')
-        fig.suptitle(f'Observer orbit — period {k+1}', fontsize=13, fontweight='bold')
-        style_3d_axes(ax, label_gap_fraction=.016)
-        figures[f'period_{k+1:02d}_trajectory'] = fig
-    return figures
+        ax.set_title(f'Period {k + 1}', fontsize=11, fontweight='bold', pad=1)
+        ax.tick_params(axis='both', labelsize=7, pad=0)
+        ax.set_xlabel('x (km)', fontsize=8, labelpad=-1)
+        ax.set_ylabel('y (km)', fontsize=8, labelpad=-1)
+        ax.set_zlabel('z (km)', fontsize=8, labelpad=-1)
+    handles, labels = fig.axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncol=4,
+               bbox_to_anchor=(.5, .009), fontsize=10)
+    fig.suptitle('Uncontrolled observer trajectories by nominal period — '
+                 'Moon-centered rotating frame, shared spatial scale',
+                 fontsize=14, fontweight='bold', y=.995)
+    fig.subplots_adjust(left=.015, right=.985, bottom=.065, top=.945,
+                        wspace=.02, hspace=.17)
+    return fig

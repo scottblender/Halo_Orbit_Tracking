@@ -4,7 +4,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 from halo_tracking.study import load_config
 from halo_tracking.dynamics import propagate
-from halo_tracking.gateway_comparison import spacecraft_measurement,spacecraft_jacobians,_filter,run_gateway_comparison,run_gateway_period_study,save_gateway_period_study
+from halo_tracking.gateway_comparison import spacecraft_measurement,spacecraft_jacobians,_filter,run_gateway_comparison,run_gateway_period_study,save_gateway_period_study,load_gateway_period_study
 from halo_tracking.gateway_reference import GatewayReference
 from halo_tracking.estimation import run_ekf
 from halo_tracking.measurements import predict,wrap
@@ -73,9 +73,33 @@ def test_gateway_period_comparison_is_standardized(tmp_path):
     assert len(rows)==4
     assert [row['observer_period'] for row in rows]==[1,1,2,2]
     assert [row['case'] for row in rows]==['perfect','lso_estimated']*2
-    assert np.isclose(study['tracking_window_tu'],cfg['gateway']['period_tu'])
+    assert np.isclose(study['tracking_window_tu'],cfg['orbit']['period_tu'])
     assert rows[0]['position_rmse_change_pct']==0.
     assert rows[2]['observer_departure_km']>0.
     assert all(np.isfinite(row['position_rmse_km']) for row in rows)
     save_gateway_period_study(study,tmp_path)
     assert (tmp_path/'gateway_period_metrics.csv').is_file()
+    saved=load_gateway_period_study(cfg,tmp_path,periods=2)
+    assert saved is not None and len(saved['rows'])==4
+    assert saved['rows'][0]['position_rmse_km']==rows[0]['position_rmse_km']
+    assert load_gateway_period_study(cfg,tmp_path,periods=3) is None
+    altered=deepcopy(cfg)
+    altered['measurement']['angle_sigma_arcsec']=2.
+    assert load_gateway_period_study(altered,tmp_path,periods=2) is None
+
+
+def test_gateway_geometry_uses_full_observer_period():
+    cfg=load_config()
+    cfg['simulation']['cadence_s']=86400.
+    result=run_gateway_comparison(cfg)
+    assert np.isclose(result['times'][0],0.)
+    assert np.isclose(result['times'][-1],cfg['orbit']['period_tu'])
+    assert np.isclose(result['config']['simulation']['periods'],1.)
+    reference=GatewayReference(cfg)
+    assert_allclose(result['gateway_truth'],
+                    reference.states(result['times']),atol=1e-12)
+    from halo_tracking.plotting import geometry
+    import matplotlib.pyplot as plt
+    fig=geometry(result)
+    assert len(fig.axes[0].lines)>=2
+    plt.close(fig)

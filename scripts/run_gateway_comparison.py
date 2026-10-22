@@ -1,4 +1,4 @@
-"""Run the one-Gateway-period perfect-versus-LSO-estimated comparison."""
+"""Run the one-observer-period perfect-versus-LSO-estimated comparison."""
 import argparse
 from pathlib import Path
 from halo_tracking.study import load_config

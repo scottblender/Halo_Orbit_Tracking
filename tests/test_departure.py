@@ -17,18 +17,19 @@ def test_reference_wrap_and_departure():
     assert len(r['period_position_rms_km'])==2
 
 
-def test_period_trajectory_figures():
-    """Create one observer trajectory figure for each period."""
+def test_period_trajectory_grid():
+    """The grid uses one panel per period and identical 3D axes."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    from halo_tracking.plotting import period_trajectory_figures
+    from halo_tracking.plotting import period_trajectory_grid
     cfg=load_config()
     result=reference_departure(cfg,periods=2,samples_per_period=20)
-    figures=period_trajectory_figures(result,cfg)
-    assert list(figures)==['period_01_trajectory','period_02_trajectory']
-    for figure in figures.values():
-        assert len(figure.axes)==1
-        assert figure.axes[0].name=='3d'
-        assert len(figure.axes[0].lines)==1
-        plt.close(figure)
+    figure=period_trajectory_grid(result,cfg)
+    assert len(figure.axes)==2
+    assert all(axis.name=='3d' for axis in figure.axes)
+    assert all(len(axis.lines)==2 for axis in figure.axes)
+    for attr in ['get_xlim3d','get_ylim3d','get_zlim3d']:
+        np.testing.assert_allclose(getattr(figure.axes[0],attr)(),
+                                   getattr(figure.axes[1],attr)())
+    plt.close(figure)
