@@ -3,18 +3,44 @@ import numpy as np
 from halo_tracking.study import load_config
 from halo_tracking.departure import reference_departure
 from halo_tracking.dynamics import propagate
+from halo_tracking.orbit_reference import correct_halo_reference
 from halo_tracking.frames import state_transform
 
 
 def test_reference_wrap_and_departure():
-    c=load_config();r=reference_departure(c,periods=2,samples_per_period=20)
-    np.testing.assert_allclose(r['repeated_reference'][0],r['repeated_reference'][20])
-    np.testing.assert_allclose(r['repeated_reference'][0],r['repeated_reference'][40])
-    assert r['period_position_rms_km'][0]<.001
-    np.testing.assert_allclose(r['position_departure_km'][20],r['diagnostics']['position_closure_km'],rtol=1e-5)
-    independent=propagate(np.array(c['orbit']['state']),[0,r['times'][-1]],c['mu'])[-1]
-    np.testing.assert_allclose(independent,r['states'][-1],atol=1e-9)
-    assert len(r['period_position_rms_km'])==2
+    """Truth remains rounded; only the repeating nominal is corrected."""
+    cfg = load_config()
+    result = reference_departure(cfg, periods=2, samples_per_period=20)
+    nominal_cfg = correct_halo_reference(cfg)
+    nominal_initial = np.asarray(nominal_cfg['orbit']['state'])
+    rounded_initial = np.asarray(cfg['orbit']['state'])
+
+    # Both nominal phases reset to the corrected periodic initial condition.
+    np.testing.assert_allclose(result['repeated_reference'][0], nominal_initial)
+    np.testing.assert_allclose(result['repeated_reference'][20], nominal_initial)
+    np.testing.assert_allclose(result['repeated_reference'][40], nominal_initial)
+    np.testing.assert_allclose(result['reference_period_states'][0], nominal_initial)
+    assert result['diagnostics']['position_closure_km'] < 1e-3
+    assert result['diagnostics']['catalog_closure_km'] > 50.
+
+    # A corrected nominal does NOT imply the rounded, uncontrolled truth
+    # starts on that orbit. First-period RMS is meaningful, not zero.
+    np.testing.assert_allclose(result['states'][0], rounded_initial)
+    initial_offset = (np.linalg.norm((rounded_initial - nominal_initial)[:3])
+                      * cfg['length_unit_km'])
+    np.testing.assert_allclose(result['diagnostics']['initial_nominal_offset_km'],
+                               initial_offset)
+    np.testing.assert_allclose(result['position_departure_km'][0], initial_offset)
+    np.testing.assert_allclose(result['period_position_rms_km'][0],
+                               np.sqrt(np.mean(result['position_departure_km'][:20]**2)))
+    assert result['period_position_rms_km'][0] > 1.
+
+    # An independent integration confirms there are no state resets.
+    expected_end = 2*nominal_cfg['orbit']['period_tu']
+    np.testing.assert_allclose(result['times'][-1], expected_end)
+    independent = propagate(rounded_initial, [0, expected_end], cfg['mu'])[-1]
+    np.testing.assert_allclose(independent, result['states'][-1], atol=1e-9)
+    assert len(result['period_position_rms_km']) == 2
 
 
 def test_period_trajectory_grid():
@@ -53,8 +79,11 @@ def test_rounded_catalog_state_shows_uncontrolled_long_horizon_departure():
     cfg = load_config()
     assert not cfg['orbit'].get('reference_corrected', False)
     result = reference_departure(cfg, periods=12, samples_per_period=20)
-    # Closure mismatch starts small and uncontrolled departure compounds.
-    assert result['diagnostics']['position_closure_km'] > 50.
-    assert result['position_departure_km'][10*20] > 500_000.
-    # The beginning of observer period 12 occurs at t = 11*T.
-    assert result['position_departure_km'][11*20] > 900_000.
+    # Nominal reference closes; the rounded catalog seed does not.
+    assert result['diagnostics']['position_closure_km'] < 1e-3
+    assert result['diagnostics']['catalog_closure_km'] > 50.
+    # Preserve the long-horizon departure regression independently of a
+    # particular finite-sample maximum or end-phase alignment.
+    assert np.max(result['position_departure_km']) > 500_000.
+    nominal_period = correct_halo_reference(cfg)['orbit']['period_tu']
+    np.testing.assert_allclose(result['times'][-1], 12*nominal_period)
