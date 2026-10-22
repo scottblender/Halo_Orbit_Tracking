@@ -44,3 +44,16 @@ def test_gateway_metric_period_boundaries():
     assert [rows[0]['gateway_observations'],rows[2]['gateway_observations']]==[2,1]
     assert [rows[0]['lso_observations'],rows[2]['lso_observations']]==[1,4]
     assert np.isfinite(rows[-1]['position_rmse_km'])
+
+
+def test_notebook_uses_period_labels_and_plot_keys():
+    """Prevent the notebook from requesting an obsolete plot key."""
+    import json
+    from pathlib import Path
+    notebook_path=Path(__file__).resolve().parents[1]/'notebooks'/'00_gateway_tracking_comparison.ipynb'
+    notebook=json.loads(notebook_path.read_text(encoding='utf-8'))
+    source='\n'.join(''.join(cell['source']) for cell in notebook['cells'])
+    assert 'period_growth' in source
+    assert 'period_trajectory_figures' in source
+    assert 'gateway_period_metrics' in source
+    assert 'cycle' not in source.lower()
