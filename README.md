@@ -33,7 +33,7 @@ The imperfect case retains observer–Gateway cross-covariance. LSO measurements
 
 The EKF comparison illustrates ideal versus measurement-based orbit knowledge. Actual errors and RMSE are from one paired realization; local covariance is not a validated physical error bound. Updated numerical results are generated in the notebook.
 
-The supplied `SNRHL2` observer state is a southern NRHO initial condition rounded to four decimals, with about 99 km closure error after one nominal period. Gateway's initial state comes from [the previous cislunar project](https://github.com/scottblender/Gradient-Free-Optimization-for-Cislunar-SDA-2/blob/main/scripts/build_target_case_database.m). Both phases start at model time zero. This study uses LU = 384400 km and TU = 375190.25852 s for both spacecraft; the Gateway source used TU = 375695 s. Sun exclusion, brightness and attitude errors are omitted.
+The supplied `SNRHL2` catalog observer state is rounded to four decimals, with about 99 km closure error before correction. The notebook uses a numerically differentially corrected periodic reference and checks its one-period closure. Gateway's initial state comes from [the previous cislunar project](https://github.com/scottblender/Gradient-Free-Optimization-for-Cislunar-SDA-2/blob/main/scripts/build_target_case_database.m). Both phases start at model time zero. This study uses LU = 384400 km and TU = 375190.25852 s for both spacecraft; the Gateway source used TU = 375695 s. Sun exclusion, brightness and attitude errors are omitted.
 
 ## Supporting code
 
@@ -55,8 +55,46 @@ The final notebook section generates 20 training, 5 validation and 5 test trajec
 
 Initial-condition spreads are 1 km and 0.01 m/s per axis, independently sampled for each one-period arc. The first learning task is next-state prediction from simulated truth states. These are simulation labels, not position measurements obtained from LSOs. Keep whole trajectories within their assigned split; fit scaling on training data only. No learned model, thrust response or stationkeeping controller is included yet.
 
-## Uncontrolled orbit departure
+## Corrected departure and continuous Gateway tracking
 
-The notebook compares 20 periods of uncontrolled observer propagation against the repeated one-period CR3BP reference. It exports position/velocity departure, per-period RMS plots, and a **single shared-scale 3D grid** containing all 20 observer periods to `results/departure/`. The rounded observer reference has about 99 km closure mismatch; departure includes reference resets and phase drift. This diagnostic does not identify chaos or select a stationkeeping cutoff.
+The notebook differentially corrects the four-decimal southern NRHO catalog
+state to a periodic Earth–Moon CR3BP reference. The new reference must close
+to better than 1 m after one period. The corrected period is approximately
+1.85564 TU (the rounded catalog supplied 1.8572 TU).
 
-Gateway follows a single CR3BP reference orbit repeated at its own period. The notebook also compares Gateway position/velocity RMSE, predicted uncertainty, and observation availability across observer periods. Each comparison starts at an observer-period boundary, lasts one complete observer period, and uses the same initial Gateway uncertainty; the tracking windows are independent and consecutive. The results are saved to `results/departure/gateway_period_metrics.csv`; the notebook reuses this CSV when its summary matches the configuration and period count. The shared-scale trajectory grid is `results/departure/observer_period_grid.png`. Gateway station-keeping is not modeled. Positive position-RMSE change indicates worse tracking than period 1, but RMSE from a single noise realization is not a statistical performance guarantee.
+The uncontrolled study propagates the corrected state for 20 periods, alongside
+eight deterministic 1-km and 0.01-m/s per-axis initial-condition perturbations.
+The **shared-scale 3D trajectory grid** is exported to
+`results/departure/observer_period_grid.png`, and the departure plot includes
+the ensemble median and 10th–90th percentile envelope. This is reference
+departure, not an operational station-keeping threshold.
+
+The Gateway study now performs **one continuous truth and EKF simulation**
+across all requested observer periods. It uses one seeded perturbed observer
+trajectory, carries the observer and Gateway estimates and covariances across
+period boundaries, and reports per-period estimation RMSE and observation
+availability in `results/departure/gateway_period_metrics.csv`. The Gateway
+truth follows its own repeating CR3BP nominal orbit, without station-keeping.
+No filter is reinitialized between periods.
+
+An illustrative **250,000-km line-of-sight range limit** applies independently
+to lunar-surface-to-observer and observer-to-Gateway links. These configurable
+hard limits in `configs/baseline.json` are study sensitivity assumptions,
+**not validated detection, brightness, Sun-exclusion, or instrument models**.
+The angular noise is still modeled as constant within the range limit.
+Metrics from intervals without observations are prediction results, not proof
+of continued tracking capability.
+
+The notebook **reuses** `gateway_period_metrics.csv` when the accompanying
+summary matches the configuration, period count, and continuous-study version;
+otherwise it regenerates both files. Older independent-window studies are
+invalidated automatically. Because this new method answers a different
+question, the new RMSE table must not be compared directly to the former
+independently reset results.
+
+Run the scientific checks and notebook from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe scripts/check_notebooks.py
+```
