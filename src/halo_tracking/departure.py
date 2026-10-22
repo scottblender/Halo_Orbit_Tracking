@@ -46,6 +46,7 @@ def reference_departure(cfg, periods=20, samples_per_period=500, rtol=2e-11, ato
         reference_period_states=reference_period_states,
         position_departure_km=position, velocity_departure_m_s=velocity,
         period_position_rms_km=prms, period_velocity_rms_m_s=vrms,
+        cycle_position_rms_km=prms, cycle_velocity_rms_m_s=vrms,
         diagnostics=diagnostic)
 
 
