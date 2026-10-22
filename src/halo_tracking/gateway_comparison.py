@@ -8,6 +8,7 @@ from .estimation import initial_covariance
 from .frames import rotation, to_mci, state_transform
 from .measurements import predict, measurement_jacobian, wrap, ARCSEC
 from .study import make_truth
+from .network import sensor_configs, observations
 from .tracking import relative_angles
 
 
@@ -77,10 +78,13 @@ def _filter(truth, cfg, z_lso, z_gateway, exact_observer, nominal=False):
             Q=np.block([[Qo,np.zeros((6,6))],[np.zeros((6,6)),Qg]])
             x=np.r_[o,g];P=F@P@F.T+Q
             if nominal:x=np.r_[truth['truth'][k],truth['gateway_truth'][k]]
-            if truth['lso_available'][k]:
-                H=np.c_[measurement_jacobian(t,x[:6],cfg,False),np.zeros((2,6))]
-                innovation=np.zeros(2) if nominal else z_lso[k]-predict(t,x[:6],cfg,False)
-                x,P=update(x,P,H,Rl,innovation)
+            available = truth.get('sensor_visible', truth['lso_available'][:, None])
+            for j, local in enumerate(sensor_configs(cfg)):
+                if available[k, j]:
+                    H=np.c_[measurement_jacobian(t,x[:6],local,False),np.zeros((2,6))]
+                    measured = z_lso[k] if z_lso.ndim == 2 else z_lso[k,j]
+                    innovation=np.zeros(2) if nominal else measured-predict(t,x[:6],local,False)
+                    x,P=update(x,P,H,Rl,innovation)
             o=x[:6]
         if truth['gateway_available'][k]:
             g=x if exact_observer else x[6:]
@@ -109,10 +113,11 @@ def run_gateway_comparison(cfg):
     scheduled=np.isclose(times/dt,np.rint(times/dt),rtol=0,atol=1e-9)
     truth['lso_available']=truth['visible']&scheduled
     truth['gateway_available']=np.array([gateway_visible(o,g,cfg) for o,g in zip(truth['truth'],truth['gateway_truth'])])&scheduled
-    lso_rng=np.random.default_rng(cfg['simulation']['seed']+30)
+    network = observations(times, truth['truth'], cfg, cfg['simulation']['seed']+30)
+    truth.update(network)
+    truth['lso_available'] = network['sensor_visible'].any(axis=1)
+    z_lso = network['measured_angles_rad']
     gateway_rng=np.random.default_rng(cfg['simulation']['seed']+40)
-    z_lso=np.array([predict(t,o,cfg,False) for t,o in zip(times,truth['truth'])])
-    z_lso+=lso_rng.normal(size=z_lso.shape)*cfg['measurement']['angle_sigma_arcsec']*ARCSEC
     z_gateway=np.array([spacecraft_measurement(t,o,g,cfg) for t,o,g in zip(times,truth['truth'],truth['gateway_truth'])])
     z_gateway+=gateway_rng.normal(size=z_gateway.shape)*cfg['comparison']['gateway_camera_sigma_arcsec']*ARCSEC
     for name,exact in [('perfect',True),('lso_estimated',False)]:
@@ -145,7 +150,7 @@ def save_comparison(result,directory):
     """Save paired state/covariance histories and clear numerical conclusions."""
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True)
     metrics=comparison_metrics(result);summary={}
-    arrays={key:result[key] for key in ['times','truth','gateway_truth','lso_available','gateway_available']}
+    arrays={key:result[key] for key in ['times','truth','gateway_truth','lso_available','gateway_available','sensor_visible','sensor_elevation_rad','ideal_angles_rad','measured_angles_rad']}
     for name in ['perfect','lso_estimated']:
         item=metrics[name]
         summary[name]={key:item[key] for key in ['position_rmse_km','velocity_rmse_m_s']}
@@ -154,7 +159,7 @@ def save_comparison(result,directory):
         for run in [name,name+'_forecast']:
             for key,value in result[run].items():arrays[run+'_'+key]=value
     summary['assumptions']=dict(duration_observer_periods=1.,duration_days=float(result['times'][-1]*result['config']['time_unit_s']/86400),
-        lso_observations=int(result['lso_available'].sum()),gateway_observations=int(result['gateway_available'].sum()),
+        lso_observation_epochs=int(result['lso_available'].sum()),lso_observations=int(result['sensor_visible'].sum()),gateway_observations=int(result['gateway_available'].sum()),
         measurements='Angles only on both optical links',gateway_prior=f"Separate per-axis prior: {result['config']['comparison']['gateway_position_sigma_km']:g} km / {1000*result['config']['comparison']['gateway_velocity_sigma_km_s']:g} m/s",
         interpretation='Forecast covariance is local/linearized; RMSE is one paired noise realization, not ensemble performance. Observer-Gateway cross-covariance is propagated; Gateway data do not refine the observer.')
     (directory/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')

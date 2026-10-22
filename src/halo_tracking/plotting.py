@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from .frames import to_mci, state_transform
 from .surface_sensor import site_mci
+from .network import sensor_configs
 from .layout import style_3d_axes
 
 def style():
@@ -40,7 +41,9 @@ def geometry(result):
     ax.plot_surface(radius*np.outer(np.cos(u),np.sin(v)),radius*np.outer(np.sin(u),np.sin(v)),
                     radius*np.outer(np.ones_like(u),np.cos(v)),color='#9aa0a6',alpha=.8,linewidth=0)
     ax.scatter([],[],[],color='#9aa0a6',s=24,label='Moon')
-    ax.scatter(*(site_rotating(cfg)*L/scale),marker='*',s=55,color='#4b7354',label='Lunar surface sensor',depthshade=False)
+    for local in sensor_configs(cfg):
+        ax.scatter(*(site_rotating(local)*L/scale),marker='*',s=55,
+                   label=local['site'].get('name','LSO'),depthshade=False)
     ax.scatter(*(observer[0]/scale),color='#245b80',s=20,depthshade=False)
     if target is not None:ax.scatter(*(target[0]/scale),color='#ca7139',s=20,depthshade=False)
     center=(points.min(axis=0)+points.max(axis=0))/(2*scale)

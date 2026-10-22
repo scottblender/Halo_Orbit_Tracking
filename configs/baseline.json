@@ -60,5 +60,30 @@
     "gateway_position_sigma_km": 1.0,
     "gateway_velocity_sigma_km_s": 1e-05,
     "gateway_camera_sigma_arcsec": 1.0
+  },
+  "sensors": [
+    {
+      "name": "North 270",
+      "latitude_deg": 30.0,
+      "longitude_east_deg": 270.0
+    },
+    {
+      "name": "North 90",
+      "latitude_deg": 30.0,
+      "longitude_east_deg": 90.0
+    },
+    {
+      "name": "South 90",
+      "latitude_deg": -85.0,
+      "longitude_east_deg": 90.0
+    }
+  ],
+  "identification": {
+    "training_arcs": 20,
+    "validation_arcs": 5,
+    "test_arcs": 5,
+    "seed": 1022,
+    "position_spread_km": 1.0,
+    "velocity_spread_m_s": 0.01
   }
 }

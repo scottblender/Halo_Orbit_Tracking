@@ -10,6 +10,7 @@ from halo_tracking.measurements import predict,wrap
 
 
 def short_truth(cfg):
+    cfg['sensors']=cfg['sensors'][:1]
     times=np.array([0.,.002,.004])
     observer=propagate(np.array(cfg['orbit']['state']),times,cfg['mu'])
     gateway=propagate(np.array(cfg['gateway']['state']),times,cfg['mu'])
