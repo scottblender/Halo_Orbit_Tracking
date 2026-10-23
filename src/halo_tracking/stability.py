@@ -11,7 +11,7 @@ from .orbit_reference import correct_halo_reference
 
 
 def monodromy(state, period_tu, mu, rtol=2e-12, atol=2e-14):
-    """Integrate a state and identity STM for one period; return endpoint, STM."""
+    """Integrate a state and identity STM for one period and return endpoint, STM."""
     if not np.isfinite(period_tu) or period_tu <= 0:
         raise ValueError('Period must be positive and finite')
     def augmented(t, y):
@@ -113,8 +113,8 @@ def orbit_stability(cfg, periods=5, ensemble_count=8, samples_per_period=100,
                         'E-folding is asymptotic growth along the dominant mode, not '
                         'a tracking deadline or maneuver budget. Tolerance comparison '
                         'is a numerical sensitivity check, not a rigorous error bound. '
-                        'Finite-horizon ensemble non-exits are right-censored; '
-                        'neither they nor near-unit multipliers prove nonlinear stability.'))
+                        'Finite-horizon ensemble non-exits are right-censored. '
+                        'Neither they nor near-unit multipliers prove nonlinear stability.'))
     return dict(summary=summary, monodromy=matrix, times_tu=times,
                 initial_offsets_normalized=offsets,
                 position_departure_km=positions, velocity_departure_m_s=velocities)
