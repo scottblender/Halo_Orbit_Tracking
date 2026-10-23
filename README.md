@@ -49,11 +49,68 @@ The supplied `SNRHL2` observer catalog state is rounded to four decimals and has
 
 The last command reproduces results without Jupyter. For environments that block kernel sockets, use `scripts/check_notebooks.py --in-process`.
 
-## System identification data
+## Station-keeping system identification dataset — first step
 
-The final notebook section generates 20 training, 5 validation and 5 test trajectories under `results/system_identification/`. Each NPZ contains uniform times, true rotating states, inertial position/velocity/acceleration, per-site ideal/noisy angles and visibility. `metadata.json` records units, configuration and split definitions.
+The learning task is now **estimate an impulsive corrective Δv** that keeps
+the uncontrolled observer near a **differentially corrected periodic halo
+reference**, rather than predict its next unforced CR3BP state. Generate data
+by running the notebook's final section or importing
+`halo_tracking.identification.generate_dataset`. The generator saves 20
+training, 5 validation, and 5 independent held-out test trajectories by
+default, each spanning **two corrected nominal periods**. The observation
+grid is sampled at 6-hour intervals and guidance decisions at **four epochs
+per period**. Every independent arc is propagated continuously; maneuvers
+are candidate labels, not applied to those trajectories.
 
-Initial-condition spreads are 1 km and 0.01 m/s per axis, independently sampled for each one-period arc. The first learning task is next-state prediction from simulated truth states. These are simulation labels, not position measurements obtained from LSOs. Keep whole trajectories within their assigned split; fit scaling on training data only. No learned model, thrust response or stationkeeping controller is included yet.
+### Explicit preliminary guidance thresholds
+
+| Measure | Maneuver trigger (OR condition) | Departure corridor |
+|---|---:|---:|
+| Reference-relative position norm | **50 km** | **100 km** |
+| Reference-relative velocity norm | **0.5 m/s** | **1.0 m/s** |
+
+These are **exploratory sensitivity-study parameters, not mission-certified
+navigation or station-keeping requirements**. A rounded catalog initial state
+is about **23 km and 0.13 m/s** from the corrected nominal state. The
+uncontrolled comparison reaches approximately **110 km and 0.9 m/s by
+0.5T**, several hundred km by 1.5T, then diverges much further. Thus the
+triggers activate before the one-period-scale departure becomes large.
+Position and velocity deviations are evaluated in physical Moon-centered
+inertial units, including the rotating-frame velocity cross term.
+
+Candidate impulsive burns are three-axis **m/s velocity changes** generated
+from a CR3BP state-transition matrix. A weighted regularized least-squares
+correction targets the *future nominal state* after **0.25T**; the
+**10 m/s** single-impulse cap is another configurable study assumption.
+Each candidate is nonlinear-propagated for validation. If a burn exceeds the
+cap or fails to reduce the weighted terminal error, its label is **NaN and
+`maneuver_label_valid=False`**, not an arbitrary clipped solution. Under
+threshold, the "do nothing" Δv label is exactly zero. These labels are a
+**single-burn local guidance surrogate**, not globally optimal multi-maneuver
+station-keeping trajectories.
+
+### Saved arrays and leakage prevention
+
+`results/system_identification/{training,validation,test}.npz` each contain:
+
+- **Deployment-relevant inputs:** `decision_navigation_states_normalized`,
+  `decision_nominal_states_normalized`,
+  `decision_navigation_deviation_mci_km_m_s`, phase/time, EKF covariance
+  diagonal, per-site noisy angular observations, availability masks and
+  elapsed time since the last LSO observation. Navigation estimates use
+  all configured lunar surface optical sensors.
+- **Supervised labels:** `target_delta_v_rotating_m_s` and
+  `target_delta_v_mci_m_s`, `maneuver_required`,
+  `maneuver_label_valid`, and nonlinear propagated before/after weighted
+  costs.
+- **Evaluation only:** `truth_rotating_normalized` and
+  `decision_truth_states_normalized`. **Never use these as deployable
+  training features**, because truth would not be available onboard.
+
+The `metadata.json` records split provenance, corrected reference,
+guidance assumptions, units, validity rules and limitations. Train scaler
+statistics must come from the training split only. No trained model or
+closed-loop controller is included yet.
 
 ## Uncontrolled observer departure and Gateway tracking
 
@@ -80,12 +137,12 @@ repeated at matching phase. The exports
 `observer_period_grid_fixed_scale.png` respectively use auto-scaling and
 fixed nominal-reference axis limits.
 
-Gateway tracking also uses one continuous EKF without periodic resets. Each
-CSV row summarizes cumulative tracking RMSE and accepted observations over
-0→kT; new observations in the most recent period are reported separately.
-The physical observer truth begins at the rounded seed, while the corrected
-nominal period is used for the horizon boundaries. A small cumulative Gateway
-RMSE with zero new measurements is **not** evidence of ongoing optical tracking.
+Gateway tracking still uses a continuous EKF with no periodic resets. The
+notebook removes the redundant cumulative baseline-Gateway metrics table and
+focuses instead on the observation-blackout prediction-endurance study,
+which reports instantaneous and rolling errors against a perturbed truth.
+The physical observer truth begins at the rounded seed. A small cumulative
+RMSE with zero new measurements would not establish ongoing optical tracking.
 
 The table distinguishes three separate measures:
 
@@ -96,9 +153,9 @@ The table distinguishes three separate measures:
 - **Endpoint Gateway range:** actual observer–Gateway separation relevant to
   optical slant-range screening.
 
-Cumulative-metric caches use method identifier
-`continuous_nominal_reference_cumulative_v4`; stale v3 and earlier CSVs
-are rejected automatically.
+The optional baseline Gateway cumulative-metrics API remains available for
+backward compatibility, but the notebook no longer generates or displays its
+redundant table. It instead uses the newer prediction-endurance results.
 
 ## Gateway prediction endurance with imperfect dynamics
 
