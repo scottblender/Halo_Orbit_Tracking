@@ -2,7 +2,7 @@
 
 Open [the main notebook](notebooks/00_gateway_tracking_comparison.ipynb). It compares Gateway tracking over **one observer period (about 8.06 days)** using exact observer knowledge versus an observer orbit estimated from a lunar surface observer (LSO).
 
-Both cases use the same truth trajectories, Gateway prior and noisy Gateway measurements. The notebook includes 3D geometry, position/velocity/acceleration histories for both spacecraft, estimation errors, predicted uncertainty, and a results table with **position and velocity RMSE**.
+Both cases use the same truth trajectories, Gateway prior and noisy Gateway measurements. The notebook includes 3D geometry, position/velocity/acceleration histories for both spacecraft, estimation errors, predicted uncertainty, and a prediction-endurance table with **instantaneous position error and rolling 24-hour position RMSE**.
 
 ## Run
 
@@ -111,6 +111,23 @@ The `metadata.json` records split provenance, corrected reference,
 guidance assumptions, units, validity rules and limitations. Train scaler
 statistics must come from the training split only. No trained model or
 closed-loop controller is included yet.
+
+### Link to nonlinear ARX
+
+The intended learned output is the **three-component corrective Δv** from
+navigation data. An inverse-guidance nonlinear ARX (NARX) model can use
+current/past navigation features and past predicted Δv outputs. Construct lag
+windows within each arc on the uniform decision grid (nine epochs over 2T),
+mask invalid targets and required invalid lag labels, and fit preprocessing
+on training arcs only. Validate recursive predictions with the model's own
+past outputs, alongside a current-feature regression baseline.
+
+The saved burns are candidate labels, **never applied to the generated arcs**.
+Past labels therefore do not represent an applied control history. This
+first dataset supports guidance imitation; demonstrating station-keeping
+requires new closed-loop rollouts that apply predicted burns and evaluate
+departure and total Δv. The notebook details this distinction from a forward
+NARX that predicts state evolution from applied controls.
 
 ## Uncontrolled observer departure and Gateway tracking
 
