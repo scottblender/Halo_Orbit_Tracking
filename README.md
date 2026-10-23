@@ -114,20 +114,20 @@ closed-loop controller is included yet.
 
 ### Link to nonlinear ARX
 
-The intended learned output is the **three-component corrective Δv** from
-navigation data. An inverse-guidance nonlinear ARX (NARX) model can use
-current/past navigation features and past predicted Δv outputs. Construct lag
-windows within each arc on the uniform decision grid (nine epochs over 2T),
-mask invalid targets and required invalid lag labels, and fit preprocessing
-on training arcs only. Validate recursive predictions with the model's own
-past outputs, alongside a current-feature regression baseline.
+The target is a three-component corrective Δv relative to the corrected,
+linearly unstable periodic halo reference. The labels are calculated by a
+regularized STM-based correction and checked with nonlinear propagation.
 
-The saved burns are candidate labels, **never applied to the generated arcs**.
-Past labels therefore do not represent an applied control history. This
-first dataset supports guidance imitation. Demonstrating station-keeping
-requires new closed-loop rollouts that apply predicted burns and evaluate
-departure and total Δv. The notebook details this distinction from a forward
-NARX that predicts state evolution from applied controls.
+Start by predicting these labels from current navigation inputs. Test whether
+navigation history improves that baseline. A nonlinear ARX (NARX) model would
+also use past Δv outputs, not just navigation history. Its benefit has not
+been demonstrated here.
+
+Candidate burns are not applied to the current arcs. Testing a NARX controller
+requires additional trajectories with applied burns and the resulting
+navigation states. Evaluate departure, maneuver feasibility, and total Δv.
+Keep complete trajectories in separate data splits and exclude invalid labels.
+No learned model or closed-loop controller is trained in this step.
 
 ## Uncontrolled observer departure and Gateway tracking
 
