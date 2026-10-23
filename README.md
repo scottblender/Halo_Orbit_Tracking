@@ -255,3 +255,19 @@ corrected-reference or independent-window results are automatically rejected.
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe scripts/check_notebooks.py
 ```
+
+## Nominal-orbit stability diagnostics
+
+The notebook calls `halo_tracking.stability.orbit_stability` to integrate the
+corrected reference and its STM over one period, report Floquet multipliers,
+and check spectral-radius sensitivity to integration tolerances. A robust
+multiplier magnitude above one identifies local linear instability; near-unit
+results remain unresolved. The reported e-folding time is a local modal
+growth timescale, not a maneuver deadline.
+
+A separate seeded ensemble starts around the corrected nominal state and
+reports sampled departure-corridor exits over five periods. It does not
+replace the catalog-seed departure study or prove nonlinear stability.
+`save_stability` writes `stability_summary.json` and
+`stability_histories.npz` under `results/stability/`; the notebook also exports
+`nominal_perturbation_departure.png`. No burns are applied in these diagnostics.
