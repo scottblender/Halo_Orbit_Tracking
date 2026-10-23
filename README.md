@@ -22,8 +22,8 @@ Select **Python (halo tracking)** and run the notebook from top to bottom. After
 | Parameter | Baseline |
 |---|---|
 | Dynamics | Earth–Moon CR3BP, no maneuvers |
-| Observer initial uncertainty, per axis | 1 km position, 0.01 m/s velocity, 1σ |
-| Gateway initial uncertainty, per axis | 1 km position, 0.01 m/s velocity, 1σ |
+| Observer initial uncertainty, per axis | 1 km position, 0.1 m/s velocity, 1σ |
+| Gateway initial uncertainty, per axis | 1 km position, 0.1 m/s velocity, 1σ |
 | Both optical links | Angles only, 1 arcsecond noise per angle |
 | Measurement cadence | 30 minutes |
 | LSOs | 30° N / 270° E, 30° N / 90° E, 85° S / 90° E, 10° mask |
