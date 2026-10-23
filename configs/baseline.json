@@ -84,7 +84,7 @@
     "test_arcs": 5,
     "seed": 1022,
     "position_spread_km": 1,
-    "velocity_spread_m_s": 0.01,
+    "velocity_spread_m_s": 0.1,
     "arc_duration_periods": 2,
     "decision_epochs_per_period": 4,
     "measurement_cadence_s": 21600,
