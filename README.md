@@ -22,18 +22,18 @@ Select **Python (halo tracking)** and run the notebook from top to bottom. After
 | Parameter | Baseline |
 |---|---|
 | Dynamics | Earth–Moon CR3BP, no maneuvers |
-| Observer initial uncertainty, per axis | 1 km position; 0.01 m/s velocity, 1σ |
-| Gateway initial uncertainty, per axis | 1 km position; 0.01 m/s velocity, 1σ |
-| Both optical links | Angles only; 1 arcsecond noise per angle |
+| Observer initial uncertainty, per axis | 1 km position, 0.01 m/s velocity, 1σ |
+| Gateway initial uncertainty, per axis | 1 km position, 0.01 m/s velocity, 1σ |
+| Both optical links | Angles only, 1 arcsecond noise per angle |
 | Measurement cadence | 30 minutes |
-| LSOs | 30° N / 270° E; 30° N / 90° E; 85° S / 90° E; 10° mask |
+| LSOs | 30° N / 270° E, 30° N / 90° E, 85° S / 90° E, 10° mask |
 | Gateway visibility | Sun 20° / Earth 10° keep-outs, Earth/Moon occultation and illustrative distance limit |
 
-The imperfect case retains observer–Gateway cross-covariance. LSO measurements update observer knowledge; Gateway measurements update Gateway without refining the observer. Initial covariances are diagonal with zero cross-covariance. Physical plots use Moon-centered inertial axes; acceleration is derived from the state and dynamics.
+The imperfect case retains observer–Gateway cross-covariance. LSO measurements update observer knowledge. Gateway measurements update Gateway without refining the observer. Initial covariances are diagonal with zero cross-covariance. Physical plots use Moon-centered inertial axes. Acceleration is derived from the state and dynamics.
 
-The EKF comparison illustrates ideal versus measurement-based orbit knowledge. Actual errors and RMSE are from one paired realization; local covariance is not a validated physical error bound. Updated numerical results are generated in the notebook.
+The EKF comparison illustrates ideal versus measurement-based orbit knowledge. Actual errors and RMSE are from one paired realization. Local covariance is not a validated physical error bound. Updated numerical results are generated in the notebook.
 
-The supplied `SNRHL2` observer catalog state is rounded to four decimals and has approximately 99 km of one-period closure error. It is intentionally left uncorrected for the uncontrolled-departure study. Gateway's initial state comes from [the previous cislunar project](https://github.com/scottblender/Gradient-Free-Optimization-for-Cislunar-SDA-2/blob/main/scripts/build_target_case_database.m). Both phases start at model time zero. This study uses LU = 384400 km and TU = 375190.25852 s for both spacecraft; the Gateway source used TU = 375695 s. Sun and Earth exclusion cones are included using an approximate solar phase; brightness and attitude errors remain unmodeled.
+The supplied `SNRHL2` observer catalog state is rounded to four decimals and has approximately 99 km of one-period closure error. It is intentionally left uncorrected for the uncontrolled-departure study. Gateway's initial state comes from [the previous cislunar project](https://github.com/scottblender/Gradient-Free-Optimization-for-Cislunar-SDA-2/blob/main/scripts/build_target_case_database.m). Both phases start at model time zero. This study uses LU = 384400 km and TU = 375190.25852 s for both spacecraft. The Gateway source used TU = 375695 s. Sun and Earth exclusion cones are included using an approximate solar phase. Brightness and attitude errors remain unmodeled.
 
 ## Supporting code
 
@@ -59,7 +59,7 @@ by running the notebook's final section or importing
 training, 5 validation, and 5 independent held-out test trajectories by
 default, each spanning **two corrected nominal periods**. The observation
 grid is sampled at 6-hour intervals and guidance decisions at **four epochs
-per period**. Every independent arc is propagated continuously; maneuvers
+per period**. Every independent arc is propagated continuously. Maneuvers
 are candidate labels, not applied to those trajectories.
 
 ### Explicit preliminary guidance thresholds
@@ -80,7 +80,7 @@ inertial units, including the rotating-frame velocity cross term.
 
 Candidate impulsive burns are three-axis **m/s velocity changes** generated
 from a CR3BP state-transition matrix. A weighted regularized least-squares
-correction targets the *future nominal state* after **0.25T**; the
+correction targets the *future nominal state* after **0.25T**. The
 **10 m/s** single-impulse cap is another configurable study assumption.
 Each candidate is nonlinear-propagated for validation. If a burn exceeds the
 cap or fails to reduce the weighted terminal error, its label is **NaN and
@@ -124,7 +124,7 @@ past outputs, alongside a current-feature regression baseline.
 
 The saved burns are candidate labels, **never applied to the generated arcs**.
 Past labels therefore do not represent an applied control history. This
-first dataset supports guidance imitation; demonstrating station-keeping
+first dataset supports guidance imitation. Demonstrating station-keeping
 requires new closed-loop rollouts that apply predicted burns and evaluate
 departure and total Δv. The notebook details this distinction from a forward
 NARX that predicts state evolution from applied controls.
@@ -134,7 +134,7 @@ NARX that predicts state evolution from applied controls.
 Station-keeping is deliberately omitted to expose nominal-orbit departure,
 changes in tracking performance, and the corrective Δv requirements and
 maneuver feasibility under the assumed burn cap. This is a stress-test
-baseline; candidate burn labels do not yet demonstrate closed-loop recovery.
+baseline. Candidate burn labels do not yet demonstrate closed-loop recovery.
 
 The physical observer's truth trajectory begins at the original four-decimal
 SNRHL2 catalog state, which does not close after its supplied period (roughly
@@ -169,7 +169,7 @@ RMSE with zero new measurements would not establish ongoing optical tracking.
 The table distinguishes three separate measures:
 
 - **Endpoint observer departure:** position difference from the corrected,
-  equal-phase *nominal orbit*; not range to Gateway or total path length.
+  equal-phase *nominal orbit*. Not range to Gateway or total path length.
 - **Maximum observer departure:** largest nominal-reference difference over
   the entire 0→kT horizon.
 - **Endpoint Gateway range:** actual observer–Gateway separation relevant to
@@ -186,7 +186,7 @@ The final tracking section of the notebook now includes a reproducible
 continuously under CR3BP plus a constant-direction inertial acceleration of
 `2e-9 m/s²` by default, while the filter **only knows CR3BP**. This is an
 illustrative acceleration, not a measured or mission-calibrated Gateway force
-model. Its vector and amplitude can be changed; zero acceleration retains
+model. Its vector and amplitude can be changed. Zero acceleration retains
 the original exactly repeated Gateway truth trajectory.
 
 To study *how long Gateway can be predicted without new measurements*, the
@@ -194,8 +194,8 @@ experiment imposes a controlled observer-to-Gateway optical blackout after
 **8 corrected nominal observer periods** by default. Earlier measurements
 must still pass range, occultation, Sun 20° and Earth 10° exclusion masks.
 Lunar surface measurements remain available whenever physical masks allow.
-Gateway truth and both EKFs are propagated **continuously** across the cutoff;
-nothing is reinitialized or recentered on truth at a period boundary.
+Gateway truth and both EKFs are propagated **continuously** across the cutoff.
+Nothing is reinitialized or recentered on truth at a period boundary.
 
 The experiment records and plots:
 - Instantaneous physical Gateway position error for exact-observer and
@@ -207,7 +207,7 @@ The experiment records and plots:
   the estimator does not model the applied acceleration, its covariance
   is **not a calibrated coverage or nonlinear error bound**.
 - First time the position error exceeds configurable **1, 10 and 100 km**
-  thresholds after the blackout; thresholds not crossed before the study ends
+  thresholds after the blackout. Thresholds not crossed before the study ends
   are *right-censored*, not assumed safe forever.
 
 Results are saved separately from the baseline matched-model metrics under
@@ -216,19 +216,19 @@ Results are saved separately from the baseline matched-model metrics under
 `gateway_prediction_summary.json`, and `blind_prediction_endurance.png`.
 Saved runs are reused only when configuration and all disturbance, threshold,
 and cutoff settings match. These outputs answer a controlled prediction
-endurance question; the chosen outage starts at 8T by **experimental design**
+endurance question. The chosen outage starts at 8T by **experimental design**
 and is not claimed to be the spacecraft's actual loss-of-visibility epoch.
 
 Set `HALO_GATEWAY_TRUTH_ACCELERATION_M_S2` and
 `HALO_GATEWAY_BLACKOUT_PERIODS` to explore other disturbances and outage
 starts. `HALO_GATEWAY_PERIODS` sets the entire analysis horizon
-(default 20; CI uses 2 and automatically places the cutoff at 1T).
+(default 20. CI uses 2 and automatically places the cutoff at 1T).
 
 ## Optical visibility assumptions
 
 Both sensor links are screened for geometric slant range, physical Earth/Sun
 occultation, and **Earth 10° / Sun 20° center-referenced keep-out angles**.
-Observer-to-Gateway measurements also exclude lunar occultation; lunar-surface
+Observer-to-Gateway measurements also exclude lunar occultation. Lunar-surface
 measurements additionally require the lunar elevation mask. Body-center
 separation uses the unified threshold
 `max(physical_occultation, configured_keepout)` as in the user's cislunar
@@ -261,7 +261,7 @@ corrected-reference or independent-window results are automatically rejected.
 The notebook calls `halo_tracking.stability.orbit_stability` to integrate the
 corrected reference and its STM over one period, report Floquet multipliers,
 and check spectral-radius sensitivity to integration tolerances. A robust
-multiplier magnitude above one identifies local linear instability; near-unit
+multiplier magnitude above one identifies local linear instability. Near-unit
 results remain unresolved. The reported e-folding time is a local modal
 growth timescale, not a maneuver deadline.
 
@@ -269,5 +269,5 @@ A separate seeded ensemble starts around the corrected nominal state and
 reports sampled departure-corridor exits over five periods. It does not
 replace the catalog-seed departure study or prove nonlinear stability.
 `save_stability` writes `stability_summary.json` and
-`stability_histories.npz` under `results/stability/`; the notebook also exports
+`stability_histories.npz` under `results/stability/`. The notebook also exports
 `nominal_perturbation_departure.png`. No burns are applied in these diagnostics.
