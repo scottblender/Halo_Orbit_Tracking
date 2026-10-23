@@ -131,6 +131,11 @@ NARX that predicts state evolution from applied controls.
 
 ## Uncontrolled observer departure and Gateway tracking
 
+Station-keeping is deliberately omitted to expose nominal-orbit departure,
+changes in tracking performance, and the corrective Δv requirements and
+maneuver feasibility under the assumed burn cap. This is a stress-test
+baseline; candidate burn labels do not yet demonstrate closed-loop recovery.
+
 The physical observer's truth trajectory begins at the original four-decimal
 SNRHL2 catalog state, which does not close after its supplied period (roughly
 99 km one-period position mismatch). It is propagated **continuously** without
