@@ -131,6 +131,11 @@ NARX that predicts state evolution from applied controls.
 
 ## Uncontrolled observer departure and Gateway tracking
 
+Station-keeping is deliberately omitted to expose nominal-orbit departure,
+changes in tracking performance, and the corrective Δv requirements and
+maneuver feasibility under the assumed burn cap. This is a stress-test
+baseline; candidate burn labels do not yet demonstrate closed-loop recovery.
+
 The physical observer's truth trajectory begins at the original four-decimal
 SNRHL2 catalog state, which does not close after its supplied period (roughly
 99 km one-period position mismatch). It is propagated **continuously** without
@@ -140,11 +145,11 @@ differentially corrected to a nearby closed CR3BP solution. The corrected
 nominal period is used consistently for the study horizons.
 
 The first-period RMS departure is therefore expected to be nonzero: the
-rounded physical truth starts away from the corrected periodic reference.
+uncontrolled observer starts away from the corrected periodic reference.
 The diagnostics separately report (1) corrected reference closure, (2) rounded
 catalog closure and (3) initial truth-to-nominal position offset. Never
 interpret the very small corrected-reference closure as a lack of departure
-of the uncontrolled rounded observer.
+of the uncontrolled NRHO observer.
 
 The 20 trajectory grid panels display **cumulative histories**, from 0→T,
 0→2T, through 0→20T, all from the same initial state and one continuous
@@ -158,7 +163,7 @@ Gateway tracking still uses a continuous EKF with no periodic resets. The
 notebook removes the redundant cumulative baseline-Gateway metrics table and
 focuses instead on the observation-blackout prediction-endurance study,
 which reports instantaneous and rolling errors against a perturbed truth.
-The physical observer truth begins at the rounded seed. A small cumulative
+The uncontrolled NRHO observer is initialized from the catalog state. A small cumulative
 RMSE with zero new measurements would not establish ongoing optical tracking.
 
 The table distinguishes three separate measures:
@@ -250,3 +255,19 @@ corrected-reference or independent-window results are automatically rejected.
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe scripts/check_notebooks.py
 ```
+
+## Nominal-orbit stability diagnostics
+
+The notebook calls `halo_tracking.stability.orbit_stability` to integrate the
+corrected reference and its STM over one period, report Floquet multipliers,
+and check spectral-radius sensitivity to integration tolerances. A robust
+multiplier magnitude above one identifies local linear instability; near-unit
+results remain unresolved. The reported e-folding time is a local modal
+growth timescale, not a maneuver deadline.
+
+A separate seeded ensemble starts around the corrected nominal state and
+reports sampled departure-corridor exits over five periods. It does not
+replace the catalog-seed departure study or prove nonlinear stability.
+`save_stability` writes `stability_summary.json` and
+`stability_histories.npz` under `results/stability/`; the notebook also exports
+`nominal_perturbation_departure.png`. No burns are applied in these diagnostics.

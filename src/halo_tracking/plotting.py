@@ -108,7 +108,9 @@ def observer_knowledge(result):
         for start,end in zip(np.flatnonzero(edges==1),np.flatnonzero(edges==-1)):
             ax.axvspan(days[start],days[min(end,len(days)-1)],color='#80a78a',alpha=.14)
         ax.set_ylabel(['Position (km)','Velocity (m/s)'][j])
-    axes[0].legend(loc='upper left',fontsize=9);axes[1].set_xlabel('Time (days)')
+    fig.legend(*axes[0].get_legend_handles_labels(),
+               loc='outside lower center', ncol=2, fontsize=9, frameon=False)
+    axes[1].set_xlabel('Time (days)')
     fig.suptitle('LSO knowledge of the halo observer — shaded interval contains LSO observations',fontsize=12,fontweight='bold')
     return fig
 
@@ -187,7 +189,7 @@ def departure_figures(result, cfg):
             ax.axvline(k, color='0.7', lw=.5, alpha=.4)
         ax.set_ylabel(label); ax.grid(axis='y', alpha=.2)
     axes[-1].set_xlabel('Elapsed nominal periods')
-    fig.suptitle('Uncontrolled rounded seed vs corrected periodic nominal reference')
+    fig.suptitle('Uncontrolled NRHO observer vs periodic nominal reference')
     figures['departure'] = fig
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True, layout='constrained')
     periods = np.arange(1, len(result['period_position_rms_km'])+1)
@@ -269,7 +271,7 @@ def period_trajectory_grid(result, cfg, columns=5, scale_mode='local'):
             label = f'Max departure: {maximum/1e6:.2f}M km'
         ax.text2D(.5, -.04, label, transform=ax.transAxes,
                   ha='center', va='top', fontsize=9, color='#40464e')
-    fig.suptitle('Uncontrolled rounded halo observer — cumulative propagation horizons',
+    fig.suptitle('Uncontrolled NRHO observer — cumulative propagation horizons',
                  y=.987, fontsize=17, fontweight='bold')
     subtitle = ('All panels begin at the same initial state; axes auto-scale'
                 if scale_mode == 'local' else
