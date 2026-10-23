@@ -334,8 +334,8 @@ def gateway_prediction_figure(study):
         panel.axvspan(cutoff, days[-1], color='#b87a62', alpha=.08)
         panel.axvline(cutoff, color='#a34f3f', ls='--', lw=1.25)
         panel.grid(alpha=.17)
-    axes[0].set_title('Gateway blind-prediction endurance — perturbed truth, unforced EKF',
-                      fontweight='bold', fontsize=13)
-    fig.text(.99, .985, f'Blackout after {meta["blackout_period"]} nominal observer periods',
-             ha='right', va='top', fontsize=9)
+    axes[0].set_title(
+        'Gateway blind-prediction endurance — perturbed truth, unforced EKF\n'
+        f'Blackout after {meta["blackout_period"]} nominal observer periods',
+        fontweight='bold', fontsize=12)
     return fig
