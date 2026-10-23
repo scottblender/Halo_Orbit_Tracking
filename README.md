@@ -140,11 +140,11 @@ differentially corrected to a nearby closed CR3BP solution. The corrected
 nominal period is used consistently for the study horizons.
 
 The first-period RMS departure is therefore expected to be nonzero: the
-rounded physical truth starts away from the corrected periodic reference.
+uncontrolled observer starts away from the corrected periodic reference.
 The diagnostics separately report (1) corrected reference closure, (2) rounded
 catalog closure and (3) initial truth-to-nominal position offset. Never
 interpret the very small corrected-reference closure as a lack of departure
-of the uncontrolled rounded observer.
+of the uncontrolled NRHO observer.
 
 The 20 trajectory grid panels display **cumulative histories**, from 0→T,
 0→2T, through 0→20T, all from the same initial state and one continuous
@@ -158,7 +158,7 @@ Gateway tracking still uses a continuous EKF with no periodic resets. The
 notebook removes the redundant cumulative baseline-Gateway metrics table and
 focuses instead on the observation-blackout prediction-endurance study,
 which reports instantaneous and rolling errors against a perturbed truth.
-The physical observer truth begins at the rounded seed. A small cumulative
+The uncontrolled NRHO observer is initialized from the catalog state. A small cumulative
 RMSE with zero new measurements would not establish ongoing optical tracking.
 
 The table distinguishes three separate measures:
