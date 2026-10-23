@@ -32,7 +32,7 @@
   },
   "estimation": {
     "initial_position_sigma_km": 1,
-    "initial_velocity_sigma_km_s": 0.00001,
+    "initial_velocity_sigma_km_s": 0.0001,
     "acceleration_psd_normalized": 0
   },
   "measurement": {
@@ -58,7 +58,7 @@
   },
   "comparison": {
     "gateway_position_sigma_km": 1,
-    "gateway_velocity_sigma_km_s": 0.00001,
+    "gateway_velocity_sigma_km_s": 0.0001,
     "gateway_camera_sigma_arcsec": 1
   },
   "sensors": [
@@ -84,7 +84,7 @@
     "test_arcs": 5,
     "seed": 1022,
     "position_spread_km": 1,
-    "velocity_spread_m_s": 0.01,
+    "velocity_spread_m_s": 0.1,
     "arc_duration_periods": 2,
     "decision_epochs_per_period": 4,
     "measurement_cadence_s": 21600,
