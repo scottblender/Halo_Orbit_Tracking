@@ -129,6 +129,49 @@ navigation states. Evaluate departure, maneuver feasibility, and total Δv.
 Keep complete trajectories in separate data splits and exclude invalid labels.
 No learned model or closed-loop controller is trained in this step.
 
+## Phase-aware dual-spacecraft NARX dataset (experimental)
+
+Run `python scripts/run_narx_dataset.py` to write the independent
+`training.npz`, `validation.npz`, `test.npz` and `metadata.json`
+into `results/narx_phase_aware/`. The existing observer-only
+`generate_dataset` and previous results are not changed.
+
+The observer is referenced to the differential-corrected halo, while Gateway
+is referenced to its supplied initial-state CR3BP trajectory (not a corrected
+periodic Gateway orbit). Each independent simulated arc contains noisy
+navigation-state proxies for both vehicles, evaluation-only truths and
+rolling navigation-error histories. The split is **by arc**, not by
+individual timestep. Warm-up rows with insufficient history are marked
+`history_valid=False`. Do not use truth as a training input.
+
+For *both* vehicles, position is limited to **0.1 km (100 m)** and
+reference-relative inertial velocity to **0.01 m/s (1 cm/s)**.
+Preliminary triggers are **0.05 km** and **0.005 m/s** respectively.
+These are new feasibility-study targets; the original 50 km / 0.5 m/s
+trigger and 100 km / 1 m/s corridor in the original study remain unchanged.
+
+At each decision the solver compares scheduled impulses at phase delays
+of 0, 1/16, 1/8 and 3/16 of the observer period, over a shared
+quarter-period terminal horizon. A linearized STM provides each candidate
+Δv, then nonlinear CR3BP propagation assesses the terminal weighted
+position/velocity residual. The minimum scored feasible candidate is
+saved with its **relative burn delay** and **absolute observer phase**.
+A feasible label only guarantees improvement against the unforced
+terminal residual; it does **not** guarantee both terminal tolerances.
+Rejected requests contain NaN targets and must be masked.
+
+**Important limitation:** this is a phase-aware *inverse-guidance dataset
+preparation* step. Candidate burns are **not applied** to the simulated
+arcs, there are no historical commanded controls or Gateway measurements
+in the state proxy, and consequently the exported history is not yet a
+complete autoregressive-with-exogenous-inputs (NARX) dataset for a
+closed-loop controller. It is suitable for starting with lagged
+navigation-to-Δv supervised baselines. Building a defensible NARX controller
+requires applying burns in the simulator, recording actual previous
+commands, and rebuilding navigation estimates from modeled sensors.
+No machine-learned model or validated closed-loop station-keeping result
+is claimed here.
+
 ## Uncontrolled observer departure and Gateway tracking
 
 Station-keeping is deliberately omitted to expose nominal-orbit departure,
