@@ -205,6 +205,9 @@ def generate_closed_loop_dataset(cfg, directory):
                             scheduled[name] = (t + label["delay_tu"], label["burn"].copy())
                             if label["delay_tu"] == 0:
                                 execute(name)
+                    # Record instantaneous commands at the current epoch, too.
+                    for name in initial_ref:
+                        results[name]["applied_delta_v_rotating_m_s"][-1] = executed[name].copy()
                     executed = {"observer": np.zeros(3), "gateway": np.zeros(3)}
                 index += 1
             episode = {}
@@ -216,10 +219,10 @@ def generate_closed_loop_dataset(cfg, directory):
                 actions = episode[name + "_applied_delta_v_rotating_m_s"]
                 nav_lag = np.full((len(grid), lag, 6), np.nan)
                 action_lag = np.full((len(grid), lag, 3), np.nan)
-                for k in range(lag - 1, len(grid)):
+                for k in range(lag, len(grid)):
                     nav_lag[k] = deviations[k - lag + 1:k + 1]
-                    # Action at k is not available until AFTER decision k.
-                    action_lag[k] = actions[k - lag + 1:k + 1]
+                    # The current action is a target, never an input feature.
+                    action_lag[k] = actions[k - lag:k]
                 episode[name + "_history_error_km_m_s"] = nav_lag
                 episode[name + "_history_applied_delta_v_rotating_m_s"] = action_lag
             episode["lso_visible"] = np.asarray(lso_visible)
@@ -229,7 +232,7 @@ def generate_closed_loop_dataset(cfg, directory):
         arrays = {key: np.stack([e[key] for e in episodes]) for key in episodes[0]}
         arrays["decision_times_tu"] = grid
         arrays["decision_phase_rad"] = 2 * np.pi * (grid / T % 1)
-        arrays["history_valid"] = np.arange(len(grid)) >= int(s["history_steps"]) - 1
+        arrays["history_valid"] = np.arange(len(grid)) >= int(s["history_steps"])
         np.savez_compressed(out / (split + ".npz"), **arrays)
         summary[split] = {"arcs": n, "decision_epochs_per_arc": len(grid),
                           "gateway_position_within_100m_fraction": float(np.mean(arrays["gateway_tracking_position_error_km"] <= .1)),
