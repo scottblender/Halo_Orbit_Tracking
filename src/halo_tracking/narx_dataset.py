@@ -124,7 +124,7 @@ def generate_phase_aware_dataset(cfg, directory):
         raise ValueError("Triggers must precede the position/velocity limits")
     if s["history_steps"] < 1 or s["decisions_per_period"] < 2:
         raise ValueError("history_steps and decisions_per_period are invalid")
-    nominal_cfg = correct_halo_reference(cfg)
+    delays = np.asarray(s["candidate_delay_fractions"], dtype=float)\n    if delays.ndim != 1 or not len(delays) or not np.all(np.isfinite(delays)) or np.any(delays < 0) or np.any(delays >= s["guidance_horizon_fraction"]):\n        raise ValueError("Candidate burn delays must lie in [0, guidance horizon)")\n    nominal_cfg = correct_halo_reference(cfg)
     period = float(nominal_cfg["orbit"]["period_tu"])
     s["observer_period_tu"] = period
     duration = float(s["arc_duration_periods"]) * period
