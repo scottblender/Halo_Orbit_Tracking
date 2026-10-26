@@ -113,15 +113,19 @@ def generate_phase_aware_dataset(cfg, directory):
     """
     cfg = deepcopy(cfg)
     s = cfg["narx"]
-    for key in ("position_tolerance_km", "velocity_tolerance_m_s",
-                "trigger_position_km", "trigger_velocity_m_s",
-                "maximum_impulse_m_s", "guidance_horizon_fraction",
-                "measurement_position_sigma_km", "measurement_velocity_sigma_m_s"):
+    for name in ("observer", "gateway"):
+        policy = s[name + "_guidance"]
+        for key in ("position_tolerance_km", "velocity_tolerance_m_s",
+                    "trigger_position_km", "trigger_velocity_m_s", "maximum_impulse_m_s"):
+            if not np.isfinite(policy[key]) or policy[key] <= 0:
+                raise ValueError(f"{name}.{key} must be positive")
+        if not (policy["trigger_position_km"] < policy["position_tolerance_km"]
+                and policy["trigger_velocity_m_s"] < policy["velocity_tolerance_m_s"]):
+            raise ValueError(f"{name} triggers must precede its limits")
+    for key in ("guidance_horizon_fraction", "measurement_position_sigma_km",
+                "measurement_velocity_sigma_m_s"):
         if not np.isfinite(s[key]) or s[key] <= 0:
             raise ValueError(f"{key} must be positive")
-    if not (s["trigger_position_km"] < s["position_tolerance_km"]
-            and s["trigger_velocity_m_s"] < s["velocity_tolerance_m_s"]):
-        raise ValueError("Triggers must precede the position/velocity limits")
     if s["history_steps"] < 1 or s["decisions_per_period"] < 2:
         raise ValueError("history_steps and decisions_per_period are invalid")
     delays = np.asarray(s["candidate_delay_fractions"], dtype=float)
@@ -164,7 +168,8 @@ def generate_phase_aware_dataset(cfg, directory):
                 navigation = truth + rng.normal(size=truth.shape) * noise * converter
                 relative = np.asarray([_error(t, x, reference(t), cfg)
                                        for t, x in zip(times, navigation)])
-                labels = [_optimal_phase(t, x, reference, cfg, s)
+                policy = {**s, **s[name + "_guidance"]}
+                labels = [_optimal_phase(t, x, reference, cfg, policy)
                           for t, x in zip(times, navigation)]
                 prefix = name + "_"
                 record[prefix + "truth_normalized_evaluation_only"] = truth
@@ -197,7 +202,9 @@ def generate_phase_aware_dataset(cfg, directory):
     metadata = dict(purpose="Phase-selected inverse guidance labels for two independent controlled spacecraft",
                     units="position km; physical velocity and delta-v m/s; phase radians; normalized states CR3BP",
                     settings=s, summary=summary,
-                    caveats=["Burn labels are not applied to truth arcs; not closed-loop NARX training.",
+                    caveats=["Observer station-keeping is separate from Gateway orbit tracking accuracy.",
+                             "Gateway guidance labels address Gateway physical trajectory, not its estimated-state error.",
+                             "Burn labels are not applied to truth arcs; not closed-loop NARX training.",
                              "Past applied controls are unavailable; history contains navigation lag only.",
                              "Navigation uses a seeded noisy-state proxy, not the operational EKF.",
                              "Gateway reference is an initial-state CR3BP trajectory, not a corrected periodic orbit.",
