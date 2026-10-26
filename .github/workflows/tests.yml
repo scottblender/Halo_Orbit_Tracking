@@ -13,3 +13,11 @@ jobs:
       - run: python scripts/check_notebooks.py
         env:
           HALO_GATEWAY_PERIODS: '2'
+      - name: Archive executed notebook
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: executed-gateway-tracking-notebook
+          path: notebooks/*.ipynb
+          if-no-files-found: error
+          retention-days: 14
