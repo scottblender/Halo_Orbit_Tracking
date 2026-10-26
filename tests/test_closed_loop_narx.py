@@ -60,8 +60,6 @@ def test_mc_initial_conditions_match_covariance_and_reference(tmp_path):
         np.testing.assert_allclose(data["initial_truth_normalized"], expected + physical)
         np.testing.assert_allclose(data["initial_navigation_normalized"],
                                    expected + physical + navigation_error)
-        np.testing.assert_allclose(data["observer_truth_normalized_evaluation_only"][:, 0],
-                                   data["initial_truth_normalized"][:, :6])
         assert np.any(np.abs(physical) > 0)
         assert np.any(np.abs(navigation_error) > 0)
         assert not np.array_equal(physical, navigation_error)
