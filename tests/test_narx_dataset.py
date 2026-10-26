@@ -32,8 +32,10 @@ def test_phase_aware_split_and_schema(tmp_path):
             starts.extend(d["observer_truth_normalized_evaluation_only"][:, 0])
     assert len(np.unique(starts, axis=0)) == 4
     meta = json.loads((tmp_path / "metadata.json").read_text())
-    assert meta["settings"]["position_tolerance_km"] == 0.1
-    assert meta["settings"]["velocity_tolerance_m_s"] == 0.01
+    assert meta["settings"]["gateway_guidance"]["position_tolerance_km"] == 0.1
+    assert meta["settings"]["gateway_guidance"]["velocity_tolerance_m_s"] == 0.01
+    assert meta["settings"]["observer_guidance"]["position_tolerance_km"] == 100
+    assert meta["settings"]["observer_guidance"]["trigger_velocity_m_s"] == 0.5
 
 
 def test_invalid_phase_rejected(tmp_path):
