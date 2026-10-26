@@ -195,6 +195,10 @@ def generate_closed_loop_dataset(cfg, directory):
                             label = _optimal_phase(t, x[sl], reference[name], cfg, policy)
                         else:
                             label = dict(required=False, valid=False, burn=np.full(3, np.nan), delay_tu=np.nan)
+                        # A future burn outside the recorded episode cannot
+                        # provide an executed-control training example.
+                        if label["valid"] and label["required"] and t + label["delay_tu"] > horizon + 1e-12:
+                            label = dict(required=True, valid=False, burn=np.full(3, np.nan), delay_tu=np.nan)
                         for key, value in (
                             ("truth_normalized_evaluation_only", truth[sl].copy()),
                             ("navigation_normalized", x[sl].copy()),
