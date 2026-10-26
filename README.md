@@ -143,6 +143,16 @@ Run `python scripts/run_narx_dataset.py` for independent training, validation an
 
 The notebook now distinguishes those concepts and shows label coverage from both the original observer-only generator and the newer phase-aware generator. A future controlled experiment must apply burns, propagate their effects into observation geometry and both estimators, and measure Gateway tracking error over multiple noisy runs.
 
+## Monte Carlo initial conditions for the NARX dataset
+
+Each closed-loop NARX episode starts near the **corrected periodic halo reference**, rather than alternating between that reference and the rounded catalog state. Initial physical observer and Gateway states are drawn from Gaussian distributions with the same **1 km position and 0.1 m/s velocity (1σ per axis)** uncertainties used by the navigation filters. Separate independent draws represent the initial navigation estimation error. Thus the true orbit offset from the reference is not confused with the estimator error.
+
+In normalized coordinates the initialization is
+`x_true(0) = x_ref(0) + δx_physical` and
+`x_est(0) = x_true(0) + δx_navigation`, with independent
+`δx_physical, δx_navigation ~ N(0, P0)`.
+The exported training files contain both offsets, initial truth/estimate and the block-diagonal covariance so that each Monte Carlo realization can be reproduced and evaluated. Training, validation and test splits use separate random streams. The rounded catalog trajectory remains in the **uncontrolled baseline study**, not in the Monte Carlo training population.
+
 ## Executed-burn NARX training data
 
 The **uncontrolled halo observer tracks Lunar Gateway** with optical measurements. As the observer departs from the corrected periodic halo, its estimated position and the available viewing geometry affect Gateway tracking. The study compares exact observer knowledge against the observer estimated using three lunar surface observatories. Three is the network used in this experiment; determining whether fewer stations suffice requires a separate comparison.
