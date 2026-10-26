@@ -106,7 +106,11 @@ def generate_closed_loop_dataset(cfg, directory):
         rng = np.random.default_rng(stream)
         episodes = []
         for arc in range(n):
-            truth = np.r_[initial_ref["observer"] + rng.normal(size=6) * spread,
+            # Alternate the rounded uncontrolled catalog state with the
+            # corrected-reference perturbation, retaining both regimes.
+            observer_seed = (np.asarray(cfg["orbit"]["state"], dtype=float)
+                             if arc % 2 == 0 else initial_ref["observer"])
+            truth = np.r_[observer_seed + rng.normal(size=6) * spread,
                           initial_ref["gateway"] + rng.normal(size=6) * spread]
             prior_o = initial_covariance(cfg)
             gateway_cfg = deepcopy(cfg)
@@ -234,9 +238,14 @@ def generate_closed_loop_dataset(cfg, directory):
         arrays["decision_phase_rad"] = 2 * np.pi * (grid / T % 1)
         arrays["history_valid"] = np.arange(len(grid)) >= int(s["history_steps"])
         np.savez_compressed(out / (split + ".npz"), **arrays)
+        pos_ok = arrays["gateway_tracking_position_error_km"] <= .1
+        vel_ok = arrays["gateway_tracking_velocity_error_m_s"] <= s["gateway_guidance"]["velocity_tolerance_m_s"]
         summary[split] = {"arcs": n, "decision_epochs_per_arc": len(grid),
-                          "gateway_position_within_100m_fraction": float(np.mean(arrays["gateway_tracking_position_error_km"] <= .1)),
-                          "gateway_velocity_within_limit_fraction": float(np.mean(arrays["gateway_tracking_velocity_error_m_s"] <= s["gateway_guidance"]["velocity_tolerance_m_s"]))}
+                          "gateway_position_within_100m_fraction": float(np.mean(pos_ok)),
+                          "gateway_velocity_within_limit_fraction": float(np.mean(vel_ok)),
+                          "gateway_both_tracking_limits_fraction": float(np.mean(pos_ok & vel_ok)),
+                          "observer_total_delta_v_m_s": float(np.sum(np.linalg.norm(arrays["observer_applied_delta_v_rotating_m_s"], axis=-1))),
+                          "gateway_total_delta_v_m_s": float(np.sum(np.linalg.norm(arrays["gateway_applied_delta_v_rotating_m_s"], axis=-1)))}
     (out / "metadata.json").write_text(json.dumps(dict(
         purpose="Executed-control trajectories for phase-aware NARX with two-body angle-only EKF",
         assumptions="Scheduled guidance candidates are applied to both truth and estimator; no execution error model.",
