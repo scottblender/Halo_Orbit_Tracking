@@ -123,15 +123,18 @@ def generate_closed_loop_dataset(cfg, directory):
             P[:6, :6], P[6:, 6:] = prior_o, prior_g
             scheduled = {"observer": None, "gateway": None}
             executed = {"observer": np.zeros(3), "gateway": np.zeros(3)}
+            executed_epoch = {"observer": np.nan, "gateway": np.nan}
             results = {name: {key: [] for key in (
                 "truth_normalized_evaluation_only", "navigation_normalized",
                 "navigation_error_km_m_s", "reference_normalized",
                 "target_delta_v_rotating_m_s", "target_burn_delay_tu",
                 "target_burn_phase_rad", "maneuver_required", "maneuver_valid",
-                "applied_delta_v_rotating_m_s", "tracking_position_error_km",
+                "applied_delta_v_rotating_m_s", "applied_burn_time_tu", "tracking_position_error_km",
                 "tracking_velocity_error_m_s", "scheduled_pending")}
                 for name in initial_ref}
             observed = []
+            lso_measurements = []
+            gateway_measurements = []
             lso_visible = []
             gateway_visible_history = []
             previous = 0.
@@ -162,6 +165,7 @@ def generate_closed_loop_dataset(cfg, directory):
                 truth[sl][3:] += burn * scales[3:]
                 x[sl][3:] += burn * scales[3:]
                 executed[name] += burn
+                executed_epoch[name] = previous
                 scheduled[name] = None
 
             while index < len(all_times):
@@ -179,6 +183,8 @@ def generate_closed_loop_dataset(cfg, directory):
                 x, P = _ekf_observations(t, x, P, lso, vis, camera, gv, cfg, sites)
                 if np.any(np.isclose(grid, t, atol=1e-12, rtol=0)):
                     observed.append(np.array([np.trace(P[:3, :3]), np.trace(P[6:9, 6:9])]))
+                    lso_measurements.append(lso.copy())
+                    gateway_measurements.append(camera.copy())
                     lso_visible.append(vis.copy())
                     gateway_visible_history.append(gv)
                     for name, sl in (("observer", slice(0, 6)), ("gateway", slice(6, 12))):
@@ -202,6 +208,7 @@ def generate_closed_loop_dataset(cfg, directory):
                             ("maneuver_required", label["required"]),
                             ("maneuver_valid", label["valid"]),
                             ("applied_delta_v_rotating_m_s", executed[name].copy()),
+                            ("applied_burn_time_tu", executed_epoch[name]),
                             ("scheduled_pending", scheduled[name] is not None),
                         ):
                             results[name][key].append(value)
@@ -212,7 +219,9 @@ def generate_closed_loop_dataset(cfg, directory):
                     # Record instantaneous commands at the current epoch, too.
                     for name in initial_ref:
                         results[name]["applied_delta_v_rotating_m_s"][-1] = executed[name].copy()
+                        results[name]["applied_burn_time_tu"][-1] = executed_epoch[name]
                     executed = {"observer": np.zeros(3), "gateway": np.zeros(3)}
+                    executed_epoch = {"observer": np.nan, "gateway": np.nan}
                 index += 1
             episode = {}
             for name in initial_ref:
@@ -229,6 +238,8 @@ def generate_closed_loop_dataset(cfg, directory):
                     action_lag[k] = actions[k - lag:k]
                 episode[name + "_history_error_km_m_s"] = nav_lag
                 episode[name + "_history_applied_delta_v_rotating_m_s"] = action_lag
+            episode["lso_measured_angles_rad"] = np.asarray(lso_measurements)
+            episode["gateway_measured_angles_rad"] = np.asarray(gateway_measurements)
             episode["lso_visible"] = np.asarray(lso_visible)
             episode["gateway_visible"] = np.asarray(gateway_visible_history)
             episode["position_covariance_trace_normalized"] = np.asarray(observed)
