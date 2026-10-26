@@ -143,6 +143,28 @@ Run `python scripts/run_narx_dataset.py` for independent training, validation an
 
 The notebook now distinguishes those concepts and shows label coverage from both the original observer-only generator and the newer phase-aware generator. A future controlled experiment must apply burns, propagate their effects into observation geometry and both estimators, and measure Gateway tracking error over multiple noisy runs.
 
+## Executed-burn NARX training data
+
+The **uncontrolled halo observer tracks Lunar Gateway** with optical measurements. As the observer departs from the corrected periodic halo, its estimated position and the available viewing geometry affect Gateway tracking. The study compares exact observer knowledge against the observer estimated using three lunar surface observatories. Three is the network used in this experiment; determining whether fewer stations suffice requires a separate comparison.
+
+The corrected halo is a nearly periodic CR3BP reference. The original rounded catalog state is instead propagated continuously as an uncontrolled physical trajectory. These are **different states**. Instability describes the local behavior around the periodic reference, not whether its numerical closure is accurate.
+
+The new generator completes an **applied-control simulation loop**:
+
+1. Propagate the observer and Gateway true states under CR3BP, including prior executed burns.
+2. Generate angle-only LSO and observer-to-Gateway measurements when the optical geometry permits.
+3. Propagate and update a coupled twelve-state EKF using those measurements.
+4. Compare candidate burn phases using the EKF states, propagate each candidate nonlinearly, and schedule accepted impulses.
+5. Apply each scheduled Δv to the simulated truth and EKF prediction, repeat observation and navigation updates, and save the complete navigation and executed-control histories.
+
+Run `python scripts/run_closed_loop_narx.py` to generate independent training, validation and test files under `results/narx_closed_loop/`. Each NPZ file contains estimated states, reference errors, selected Δv/phase labels, actual executed Δv, causal lag histories, visibility, covariance summaries and **Gateway tracking error relative to truth**. The next burn is never included in its own lagged-control input. The notebook produces a smaller illustration of this closed-loop dataset.
+
+The observer's maneuver trigger remains **50 km or 0.5 m/s**, with a **100 km / 1 m/s** reference-departure corridor. The separate Gateway physical-correction trigger is **50 m or 0.005 m/s**, with a **100 m / 0.01 m/s** reference-departure corridor. The engineering goal of **Gateway *tracking* error below 100 m and 0.01 m/s** is assessed from the estimated-minus-true Gateway state, not assumed from those maneuver triggers.
+
+The controller data record executed commands, but no trained NARX model is included. The guidance policy is an STM-based candidate selector, not a learned controller, and it does not directly optimize Gateway estimation uncertainty. There are no actuator execution errors or unmodeled forces in this closed-loop generator. Meeting the Gateway tracking requirement remains to be demonstrated over independently tested trajectories.
+
+The notebook also includes the governing equations for the CR3BP dynamics, optical measurement model, tracking errors, impulsive burns, STM-weighted guidance and lagged NARX inputs, along with descriptions of what the actual plots establish.
+
 ## Uncontrolled observer departure and Gateway tracking
 
 Station-keeping is deliberately omitted to expose nominal-orbit departure,
