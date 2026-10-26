@@ -39,3 +39,29 @@ def test_closed_loop_is_reproducible(tmp_path):
         for key in ("gateway_navigation_normalized", "observer_applied_delta_v_rotating_m_s",
                     "gateway_tracking_position_error_km"):
             np.testing.assert_equal(a[key], b[key])
+
+
+def test_mc_initial_conditions_match_covariance_and_reference(tmp_path):
+    cfg = load_config()
+    cfg["narx"].update(training_arcs=3, validation_arcs=1, test_arcs=1,
+                       arc_duration_periods=.25, decisions_per_period=8,
+                       history_steps=1, closed_loop_measurement_cadence_s=86400)
+    from halo_tracking.orbit_reference import correct_halo_reference
+    from halo_tracking.estimation import initial_covariance
+    corrected = correct_halo_reference(cfg)
+    expected = np.r_[corrected["orbit"]["state"], cfg["gateway"]["state"]]
+    generate_closed_loop_dataset(cfg, tmp_path)
+    with np.load(tmp_path / "training.npz") as data:
+        p = data["initial_covariance_normalized"]
+        np.testing.assert_allclose(p[:6, :6], initial_covariance(cfg))
+        np.testing.assert_allclose(p[:6, 6:], 0)
+        physical = data["initial_physical_offset_normalized"]
+        navigation_error = data["initial_navigation_error_normalized"]
+        np.testing.assert_allclose(data["initial_truth_normalized"], expected + physical)
+        np.testing.assert_allclose(data["initial_navigation_normalized"],
+                                   expected + physical + navigation_error)
+        np.testing.assert_allclose(data["observer_truth_normalized_evaluation_only"][:, 0],
+                                   data["initial_truth_normalized"][:, :6])
+        assert np.any(np.abs(physical) > 0)
+        assert np.any(np.abs(navigation_error) > 0)
+        assert not np.array_equal(physical, navigation_error)
