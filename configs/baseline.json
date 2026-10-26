@@ -119,11 +119,6 @@
     "initial_velocity_spread_m_s": 0.003,
     "measurement_position_sigma_km": 0.01,
     "measurement_velocity_sigma_m_s": 0.001,
-    "position_tolerance_km": 0.1,
-    "velocity_tolerance_m_s": 0.01,
-    "trigger_position_km": 0.05,
-    "trigger_velocity_m_s": 0.005,
-    "maximum_impulse_m_s": 0.5,
     "guidance_horizon_fraction": 0.25,
     "candidate_delay_fractions": [
       0,
@@ -132,6 +127,20 @@
       0.1875
     ],
     "regularization": 0.03,
-    "effort_penalty": 0.001
+    "effort_penalty": 0.001,
+    "observer_guidance": {
+      "position_tolerance_km": 100,
+      "velocity_tolerance_m_s": 1,
+      "trigger_position_km": 50,
+      "trigger_velocity_m_s": 0.5,
+      "maximum_impulse_m_s": 10
+    },
+    "gateway_guidance": {
+      "position_tolerance_km": 0.1,
+      "velocity_tolerance_m_s": 0.01,
+      "trigger_position_km": 0.05,
+      "trigger_velocity_m_s": 0.005,
+      "maximum_impulse_m_s": 0.5
+    }
   }
 }
