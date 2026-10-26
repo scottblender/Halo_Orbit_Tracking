@@ -92,8 +92,20 @@ def generate_closed_loop_dataset(cfg, directory):
                  for name, state in initial_ref.items()}
     scales = np.r_[np.full(3, 1 / cfg["length_unit_km"]),
                    np.full(3, cfg["time_unit_s"] / (1000 * cfg["length_unit_km"]))]
-    spread = scales * np.r_[np.full(3, s["initial_position_spread_km"]),
-                            np.full(3, s["initial_velocity_spread_m_s"])]
+    # Covariance describes the initial physical state dispersion and the
+    # independent error of the initial navigation estimate.
+    prior_o = initial_covariance(cfg)
+    gateway_cfg = deepcopy(cfg)
+    gateway_cfg["estimation"]["initial_position_sigma_km"] = cfg["comparison"]["gateway_position_sigma_km"]
+    gateway_cfg["estimation"]["initial_velocity_sigma_km_s"] = cfg["comparison"]["gateway_velocity_sigma_km_s"]
+    prior_g = initial_covariance(gateway_cfg)
+    initial_covariance_joint = np.zeros((12, 12))
+    initial_covariance_joint[:6, :6] = prior_o
+    initial_covariance_joint[6:, 6:] = prior_g
+    if not np.all(np.isfinite(initial_covariance_joint)):
+        raise ValueError("Initial Monte Carlo covariance must be finite")
+    if np.min(np.linalg.eigvalsh(initial_covariance_joint)) < -1e-12:
+        raise ValueError("Initial Monte Carlo covariance must be positive semidefinite")
     sites = sensor_configs(cfg)
     out = Path(directory)
     out.mkdir(parents=True, exist_ok=True)
@@ -106,21 +118,14 @@ def generate_closed_loop_dataset(cfg, directory):
         rng = np.random.default_rng(stream)
         episodes = []
         for arc in range(n):
-            # Alternate the rounded uncontrolled catalog state with the
-            # corrected-reference perturbation, retaining both regimes.
-            observer_seed = (np.asarray(cfg["orbit"]["state"], dtype=float)
-                             if arc % 2 == 0 else initial_ref["observer"])
-            truth = np.r_[observer_seed + rng.normal(size=6) * spread,
-                          initial_ref["gateway"] + rng.normal(size=6) * spread]
-            prior_o = initial_covariance(cfg)
-            gateway_cfg = deepcopy(cfg)
-            gateway_cfg["estimation"]["initial_position_sigma_km"] = cfg["comparison"]["gateway_position_sigma_km"]
-            gateway_cfg["estimation"]["initial_velocity_sigma_km_s"] = cfg["comparison"]["gateway_velocity_sigma_km_s"]
-            prior_g = initial_covariance(gateway_cfg)
-            x = truth + np.r_[rng.multivariate_normal(np.zeros(6), prior_o),
-                               rng.multivariate_normal(np.zeros(6), prior_g)]
-            P = np.zeros((12, 12))
-            P[:6, :6], P[6:, 6:] = prior_o, prior_g
+            nominal = np.r_[initial_ref["observer"], initial_ref["gateway"]]
+            physical_offset = rng.multivariate_normal(
+                np.zeros(12), initial_covariance_joint)
+            navigation_offset = rng.multivariate_normal(
+                np.zeros(12), initial_covariance_joint)
+            truth = nominal + physical_offset
+            x = truth + navigation_offset
+            P = initial_covariance_joint.copy()
             scheduled = {"observer": None, "gateway": None}
             executed = {"observer": np.zeros(3), "gateway": np.zeros(3)}
             executed_epoch = {"observer": np.nan, "gateway": np.nan}
@@ -227,7 +232,12 @@ def generate_closed_loop_dataset(cfg, directory):
                     executed = {"observer": np.zeros(3), "gateway": np.zeros(3)}
                     executed_epoch = {"observer": np.nan, "gateway": np.nan}
                 index += 1
-            episode = {}
+            episode = {
+                "initial_physical_offset_normalized": physical_offset,
+                "initial_navigation_error_normalized": navigation_offset,
+                "initial_truth_normalized": nominal + physical_offset,
+                "initial_navigation_normalized": nominal + physical_offset + navigation_offset,
+            }
             for name in initial_ref:
                 for key, values in results[name].items():
                     episode[name + "_" + key] = np.asarray(values)
@@ -249,6 +259,7 @@ def generate_closed_loop_dataset(cfg, directory):
             episode["position_covariance_trace_normalized"] = np.asarray(observed)
             episodes.append(episode)
         arrays = {key: np.stack([e[key] for e in episodes]) for key in episodes[0]}
+        arrays["initial_covariance_normalized"] = initial_covariance_joint
         arrays["decision_times_tu"] = grid
         arrays["decision_phase_rad"] = 2 * np.pi * (grid / T % 1)
         arrays["history_valid"] = np.arange(len(grid)) >= int(s["history_steps"])
@@ -262,7 +273,8 @@ def generate_closed_loop_dataset(cfg, directory):
                           "observer_total_delta_v_m_s": float(np.sum(np.linalg.norm(arrays["observer_applied_delta_v_rotating_m_s"], axis=-1))),
                           "gateway_total_delta_v_m_s": float(np.sum(np.linalg.norm(arrays["gateway_applied_delta_v_rotating_m_s"], axis=-1)))}
     (out / "metadata.json").write_text(json.dumps(dict(
-        purpose="Executed-control trajectories for phase-aware NARX with two-body angle-only EKF",
+        purpose="Covariance-driven Monte Carlo applied-control trajectories for phase-aware NARX",
+        initial_sampling="Each physical initial state is independently drawn about the corrected observer / Gateway nominal reference using their configured filter prior covariances. Independent draws determine initial navigation error. The rounded catalog trajectory belongs to the separate uncontrolled baseline, not these training arcs.",
         assumptions="Scheduled guidance candidates are applied to both truth and estimator; no execution error model.",
         interpretation="Gateway tracking metrics compare EKF estimate against simulated Gateway truth; guidance uses reference departure.",
         configuration=s, summary=summary), indent=2) + "\n")
