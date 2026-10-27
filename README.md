@@ -143,6 +143,14 @@ Run `python scripts/run_narx_dataset.py` for independent training, validation an
 
 The notebook now distinguishes those concepts and shows label coverage from both the original observer-only generator and the newer phase-aware generator. A future controlled experiment must apply burns, propagate their effects into observation geometry and both estimators, and measure Gateway tracking error over multiple noisy runs.
 
+## Two-stage NARX guidance baseline
+
+Run `python scripts/run_two_stage_narx.py` to regenerate the covariance-sampled Monte Carlo episodes and train an initial two-stage **supervised imitation** model. The first stage classifies whether a burn is requested. For feasible requested burns, the second stage predicts the three Δv components (m/s) and which of four available burn delays the STM guidance selected.
+
+Inputs are the most recent estimated observer or Gateway reference deviations, **previous executed** burns, orbital phase, optical availability and EKF position-covariance trace. No simulated truth is supplied to the predictor. Training uses only complete training episodes. Validation and held-out test episodes are independent.
+
+The output `results/narx_two_stage/metrics.json` reports classification precision, recall, F1 and confusion matrix, Δv RMSE, burn-delay class accuracy, and number of feasible labels. Δv and timing scores are **teacher-forced** on decisions with feasible reference labels. These metrics measure how well the learned model imitates the STM policy. They do not establish whether a learned controller maintains Gateway tracking within 100 m and 0.01 m/s. That requires replacing the guidance policy with model predictions during a separate controlled Monte Carlo evaluation.
+
 ## Monte Carlo initial conditions for the NARX dataset
 
 Each closed-loop NARX episode starts near the **corrected periodic halo reference**, rather than alternating between that reference and the rounded catalog state. Initial physical observer and Gateway states are drawn from Gaussian distributions with the same **1 km position and 0.1 m/s velocity (1σ per axis)** uncertainties used by the navigation filters. Separate independent draws represent the initial navigation estimation error. Thus the true orbit offset from the reference is not confused with the estimator error.
