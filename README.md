@@ -6,16 +6,18 @@ Lunar Gateway on a prescribed nominal 9:2 NRHO.
 
 ## Notebooks — start here
 
-- [00 — One-year orbital references and LSO measurements](notebooks/00_one_year_problem_setup.ipynb):
-  periodicity checks for the corrected observer halo and Gateway, plus one-year
-  nominal optical visibility.
+- [00 — Problem motivation, LSO geometry and uncontrolled tracking baseline](notebooks/00_gateway_tracking_comparison.ipynb):
+  restored observer/Gateway tracking visualizations, three-LSO navigation,
+  observability, orbit stability and departure, optical-blackout prediction,
+  validated periodic references, and optional one-year nominal visibility.
 - [01 — One-year STM vs NARX results](notebooks/01_narx_results.ipynb):
   short-arc teacher training, held-out offline NARX scores, actual 365-day
   uncontrolled/STM/NARX rollouts, observer departure, cumulative Δv,
   and Gateway tracking plots.
 
-The obsolete short-duration cumulative tracking notebook is removed from the
-current checkout and remains recoverable in Git history.
+All original Notebook 00 analyses and plot outputs are restored and retained
+as the problem motivation. One-year learned station-keeping dataset generation,
+closed-loop control and measured results are exclusively in Notebook 01.
 
 ## Model and comparison
 
@@ -44,7 +46,7 @@ must not be described as full-year tracking accuracy.
 
 Static GitHub notebook previews show plots **only when their outputs are saved**.
 The [one-year pilot workflow](https://github.com/scottblender/Halo_Orbit_Tracking/actions/workflows/one-year-pilot.yml)
-generates real 365-day trajectories, executes both new notebooks, and saves
+generates real 365-day trajectories, executes both notebooks, and saves
 embedded figures in its artifact. For in-repository PR branches, the workflow
 also attempts to commit these executed notebook outputs to the PR branch.
 The Scientific Checks workflow saves executed notebook outputs on main.
