@@ -88,6 +88,10 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
         "gateway_visible": np.full(n, np.nan),
         "maneuver_requested": np.zeros(n, dtype=bool),
         "maneuver_rejected": np.zeros(n, dtype=bool),
+        "predicted_delta_v_rotating_m_s": np.full((n, 3), np.nan),
+        "predicted_delay_tu": np.full(n, np.nan),
+        "predicted_valid": np.zeros(n, dtype=bool),
+        "model_invoked": np.zeros(n, dtype=bool),
         "applied_delta_v_rotating_m_s": np.zeros((n, 3)),
     }
     nav_history = []
@@ -172,9 +176,14 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
                                 np.cos(2*np.pi*(t/observer_period % 1)),
                                 float(target_visible), float(visible.sum()),
                                 np.log10(max(np.trace(P[:3, :3]), 1e-30))]
+                records["model_invoked"][k] = True
                 command = predict_observer_policy(
                     model, feature, observer_period,
                     settings["maximum_impulse_m_s"])
+                records["predicted_valid"][k] = bool(command["valid"])
+                if command["required"]:
+                    records["predicted_delta_v_rotating_m_s"][k] = command["burn"]
+                    records["predicted_delay_tu"][k] = command["delay_tu"]
             else:
                 command = dict(required=False, valid=True,
                                burn=np.zeros(3), delay_tu=0.)
@@ -236,7 +245,9 @@ def _one_arc_summary(episode, cfg, controller, arc):
                 gateway_tracking_valid_fraction=float(valid_g.mean()),
                 gateway_visibility_fraction=float(np.nansum(episode["gateway_visible"])/len(p)),
                 lso_visible_fraction=float(np.nansum(episode["lso_visible_count"] > 0)/len(p)),
-                halted_reason=episode["halted_reason"])
+                halted_reason=episode["halted_reason"],
+                model_calls=int(episode["model_invoked"].sum()),
+                invalid_model_commands=int(np.sum(episode["model_invoked"] & episode["maneuver_rejected"])))
 
 
 def run_paired_study(cfg, output_dir, bundle, days=365, arcs=5, seed=24017,
@@ -249,6 +260,14 @@ def run_paired_study(cfg, output_dir, bundle, days=365, arcs=5, seed=24017,
     """
     if days <= 0 or arcs < 1 or measurement_cadence_s <= 0 or decisions_per_period < 2:
         raise ValueError("Invalid rollout span, samples, or cadence")
+    teacher_decisions = int(cfg["narx"]["decisions_per_period"])
+    teacher_cadence = float(cfg["narx"].get("closed_loop_measurement_cadence_s", 21600.))
+    if decisions_per_period != teacher_decisions or not np.isclose(measurement_cadence_s, teacher_cadence):
+        raise ValueError(
+            f"Training/deployment cadence mismatch: teacher {teacher_decisions} decisions/period, "
+            f"{teacher_cadence:g} s measurement cadence; deployment "
+            f"{decisions_per_period} decisions/period, {measurement_cadence_s:g} s. "
+            "Regenerate matching teacher data or match the rollout settings.")
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     observer_at, observer_period, corrected = _observer_reference(cfg)
