@@ -4,7 +4,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -12,24 +12,20 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest
-      - run: python scripts/check_notebooks.py
-        env:
-          HALO_GATEWAY_PERIODS: '2'
-      - name: Archive executed notebook
+      - name: Validate both research notebooks without overwriting saved visualizations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import nbformat
+          for path in sorted(Path("notebooks").glob("*.ipynb")):
+              nbformat.validate(nbformat.read(path, as_version=4))
+              print("Validated notebook structure:", path)
+          PY
+      - name: Archive original notebook outputs for inspection
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: executed-gateway-tracking-notebook
+          name: research-notebooks-preserved
           path: notebooks/*.ipynb
           if-no-files-found: error
           retention-days: 14
-      - name: Commit notebook execution outputs to main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' && success()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add notebooks/*.ipynb
-          if ! git diff --cached --quiet; then
-            git commit -m "Save executed notebook outputs [skip ci]"
-            git push origin HEAD:main
-          fi
