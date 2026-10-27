@@ -9,7 +9,7 @@ historical prototypes; those should not be mistaken for the active architecture.
 
 The six model assumptions and acceptance checks are:
 
-1. **Observer reference:** numerically differentially corrected periodic Earth–Moon CR3BP halo, with closure checked by \`correct_halo_reference\`.
+1. **Observer reference:** numerically differentially corrected periodic Earth–Moon CR3BP halo, with closure checked by `correct_halo_reference`.
 2. **Gateway truth:** supplied nominal 9:2 NRHO state validated for one-period closure (position and velocity), evaluated as a prescribed, repeated periodic CR3BP ephemeris. It has **zero commanded maneuvers**. This verifies closure of the supplied seed within the model, *not* flight ephemeris fidelity or independent 9:2-family classification.
 3. **Measurements:** three lunar surface optical sites, plus observer-to-Gateway angles where available, drive a coupled EKF. The controller uses estimated observer deviations, previous **executed** burns, orbital phase, visibility and estimated covariance, never truth.
 4. **STM policy:** at each candidate decision, an STM-based least-squares correction is checked by nonlinear propagation and scheduled/applied to the observer.
@@ -23,21 +23,21 @@ claimed until the 365-day generator has actually completed.
 
 Run from a checkout with development dependencies installed:
 
-\`\`\`bash
+```bash
 python -m pip install -e ".[dev]"
 python scripts/run_one_year_study.py --days 365 --arcs 5
-\`\`\`
+```
 
-Output: \`results/one_year/summary.json\`, \`arc_metrics.csv\`, three
-\`{uncontrolled,stm,narx}_arc_XXX.npz\` files per realization, and the frozen
-\`observer_narx.joblib\` bundle. Notebook 01 loads these artifacts and produces
+Output: `results/one_year/summary.json`, `arc_metrics.csv`, three
+`{uncontrolled,stm,narx}_arc_XXX.npz` files per realization, and the frozen
+`observer_narx.joblib` bundle. Notebook 01 loads these artifacts and produces
 comparative trajectory, Δv, Gateway estimation, and survival summaries.
 
 For a quick implementation smoke test only:
 
-\`\`\`bash
+```bash
 python scripts/run_one_year_study.py --days 0.5 --arcs 1 --training-arcs 5 --output results/one_year_smoke
-\`\`\`
+```
 
 The full-year results are sensitive to the short-arc teacher-training population
 and the idealized CR3BP / optical sensor model. They must not be interpreted
