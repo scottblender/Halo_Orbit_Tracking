@@ -1,0 +1,255 @@
+{
+  "output": "rotating-frame halo observer delta-v vector [m/s]",
+  "label_objective": "STM halo-reference departure correction, not direct Gateway tracking optimization",
+  "epochs_trained": 600,
+  "selected_epoch": 69,
+  "history_steps": 4,
+  "parameters": 3843,
+  "splits": {
+    "validation": {
+      "NARX one-step": {
+        "decisions": 65,
+        "burn_examples": 8,
+        "vector_rmse_m_s": 0.15482448929739637,
+        "burn_vector_rmse_m_s": 0.3404465873747019,
+        "no_burn_vector_rmse_m_s": 0.10520318109078176,
+        "component_rmse_m_s": [
+          0.07405478388082203,
+          0.0899947847392214,
+          0.10191884119389086
+        ],
+        "bias_m_s": [
+          0.012544609171097622,
+          -0.001245850630394663,
+          0.017752514248034486
+        ]
+      },
+      "NARX recursive": {
+        "decisions": 65,
+        "burn_examples": 8,
+        "vector_rmse_m_s": 0.18391945576375737,
+        "burn_vector_rmse_m_s": 0.41336287158978025,
+        "no_burn_vector_rmse_m_s": 0.12079872302949965,
+        "component_rmse_m_s": [
+          0.087947048056458,
+          0.10758947195472875,
+          0.12048314600430389
+        ],
+        "bias_m_s": [
+          0.004571652375478871,
+          -0.008691348098489374,
+          0.015354455342574931
+        ]
+      },
+      "Gradient-boosted": {
+        "decisions": 65,
+        "burn_examples": 8,
+        "vector_rmse_m_s": 0.17441562223090337,
+        "burn_vector_rmse_m_s": 0.4298425804390386,
+        "no_burn_vector_rmse_m_s": 0.09358694722815074,
+        "component_rmse_m_s": [
+          0.06668455541964602,
+          0.11898260526464934,
+          0.10870657289747473
+        ],
+        "bias_m_s": [
+          0.00859513873981153,
+          0.005562972008250618,
+          0.010079765635698729
+        ]
+      },
+      "Zero delta-v": {
+        "decisions": 65,
+        "burn_examples": 8,
+        "vector_rmse_m_s": 0.1921449190750272,
+        "burn_vector_rmse_m_s": 0.5476972869675215,
+        "no_burn_vector_rmse_m_s": 0.0,
+        "component_rmse_m_s": [
+          0.08146038856333997,
+          0.125086193414465,
+          0.12098478928583327
+        ],
+        "bias_m_s": [
+          0.004908028172138521,
+          0.0030533330973363457,
+          0.003803898429471614
+        ]
+      },
+      "Previous delta-v": {
+        "decisions": 65,
+        "burn_examples": 8,
+        "vector_rmse_m_s": 0.40291422391787385,
+        "burn_vector_rmse_m_s": 1.0517904882334976,
+        "no_burn_vector_rmse_m_s": 0.17279872787206332,
+        "component_rmse_m_s": [
+          0.2548830588544266,
+          0.22164362153077363,
+          0.21965564681809718
+        ],
+        "bias_m_s": [
+          0.010982869853309844,
+          -0.008510907858235472,
+          0.001484587322729143
+        ]
+      }
+    },
+    "test": {
+      "NARX one-step": {
+        "decisions": 65,
+        "burn_examples": 9,
+        "vector_rmse_m_s": 0.20823902564935,
+        "burn_vector_rmse_m_s": 0.44153799197756227,
+        "no_burn_vector_rmse_m_s": 0.137842092756284,
+        "component_rmse_m_s": [
+          0.06924045504588174,
+          0.13996526795478792,
+          0.1377642005557841
+        ],
+        "bias_m_s": [
+          -0.007153801795490741,
+          0.004809244538081257,
+          0.006920093556098111
+        ]
+      },
+      "NARX recursive": {
+        "decisions": 65,
+        "burn_examples": 9,
+        "vector_rmse_m_s": 0.2301828556076309,
+        "burn_vector_rmse_m_s": 0.5137589036443856,
+        "no_burn_vector_rmse_m_s": 0.1381275068521379,
+        "component_rmse_m_s": [
+          0.07197615228117378,
+          0.1571723742208454,
+          0.15198824066441216
+        ],
+        "bias_m_s": [
+          -0.01191938335951776,
+          -0.0005535996179282303,
+          0.0003096238486300241
+        ]
+      },
+      "Gradient-boosted": {
+        "decisions": 65,
+        "burn_examples": 9,
+        "vector_rmse_m_s": 0.2077452626704501,
+        "burn_vector_rmse_m_s": 0.5164305729705218,
+        "no_burn_vector_rmse_m_s": 0.08503899213249363,
+        "component_rmse_m_s": [
+          0.09020852891463467,
+          0.14911440471076454,
+          0.11307258633650402
+        ],
+        "bias_m_s": [
+          0.003215659276210633,
+          0.014628927560126922,
+          0.009676146840602215
+        ]
+      },
+      "Zero delta-v": {
+        "decisions": 65,
+        "burn_examples": 9,
+        "vector_rmse_m_s": 0.19771157744551482,
+        "burn_vector_rmse_m_s": 0.5313338990628103,
+        "no_burn_vector_rmse_m_s": 0.0,
+        "component_rmse_m_s": [
+          0.06404409059392663,
+          0.10510670467593515,
+          0.15472815822647304
+        ],
+        "bias_m_s": [
+          -0.0015913956100152699,
+          -0.007462709526548686,
+          -0.010110504131423347
+        ]
+      },
+      "Previous delta-v": {
+        "decisions": 65,
+        "burn_examples": 9,
+        "vector_rmse_m_s": 0.35664167738981917,
+        "burn_vector_rmse_m_s": 0.7642938725117867,
+        "no_burn_vector_rmse_m_s": 0.2318503782195605,
+        "component_rmse_m_s": [
+          0.1906246541790711,
+          0.15894805577667215,
+          0.2561074829741399
+        ],
+        "bias_m_s": [
+          3.137487934096013e-05,
+          0.003627561978621242,
+          -0.0053780547427140874
+        ]
+      }
+    }
+  },
+  "data_diagnostics": {
+    "training": {
+      "arcs": 20,
+      "decisions": 260,
+      "burn_examples": 41,
+      "no_burn_fraction": 0.8423076923076923,
+      "burn_examples_per_arc": [
+        2,
+        1,
+        3,
+        2,
+        2,
+        1,
+        3,
+        2,
+        3,
+        3,
+        2,
+        1,
+        1,
+        3,
+        3,
+        2,
+        2,
+        2,
+        1,
+        2
+      ],
+      "tracking_limit_exceeded_decisions": 145,
+      "tracking_limit_exceeded_without_command": 125,
+      "position_limit_km": 0.1,
+      "velocity_limit_m_s": 0.01,
+      "unknown_requested_targets": 0
+    },
+    "validation": {
+      "arcs": 5,
+      "decisions": 65,
+      "burn_examples": 8,
+      "no_burn_fraction": 0.8769230769230769,
+      "burn_examples_per_arc": [
+        2,
+        2,
+        1,
+        2,
+        1
+      ],
+      "tracking_limit_exceeded_decisions": 30,
+      "tracking_limit_exceeded_without_command": 27,
+      "position_limit_km": 0.1,
+      "velocity_limit_m_s": 0.01,
+      "unknown_requested_targets": 0
+    },
+    "test": {
+      "arcs": 5,
+      "decisions": 65,
+      "burn_examples": 9,
+      "no_burn_fraction": 0.8615384615384616,
+      "burn_examples_per_arc": [
+        1,
+        2,
+        2,
+        2,
+        2
+      ],
+      "tracking_limit_exceeded_decisions": 31,
+      "tracking_limit_exceeded_without_command": 26,
+      "position_limit_km": 0.1,
+      "velocity_limit_m_s": 0.01,
+      "unknown_requested_targets": 0
+    }
+  }
+}

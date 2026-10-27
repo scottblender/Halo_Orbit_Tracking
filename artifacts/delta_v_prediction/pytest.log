@@ -1,0 +1,11 @@
+..............................................                           [100%]
+============================== warnings summary ===============================
+tests/test_gateway_comparison.py::test_gateway_period_comparison_is_standardized
+tests/test_gateway_comparison.py::test_gateway_geometry_uses_full_observer_period
+tests/test_gateway_prediction.py::test_forced_truth_without_filter_acceleration
+tests/test_gateway_prediction.py::test_prediction_summaries_and_persistent_cache
+  C:\Users\scott\Documents\Codex\halo-narx\src\halo_tracking\gateway_comparison.py:136: UserWarning: Supplied rounded state does not close within 1 km. Treat as an initial-value trajectory, not a validated periodic halo.
+    truth=make_truth(cfg, extra_times=boundaries)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+46 passed, 4 warnings in 43.14s

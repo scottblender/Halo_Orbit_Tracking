@@ -1,4 +1,4 @@
-name: Paired neural NARX annual experiment
+name: Halo delta-v prediction experiment
 on:
   workflow_dispatch:
 jobs:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: paired-365-day-neural-narx
+          name: halo-delta-v-prediction
           path: |
-            artifacts/neural_narx/
+            artifacts/delta_v_prediction/
             notebooks/01_narx_results.ipynb

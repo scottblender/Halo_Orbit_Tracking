@@ -1,7 +1,7 @@
 """Protect the distinct purposes and visual content of the research notebooks.
 
 Notebook 00 motivates the problem and must not lose its historical figures.
-Notebook 01 is where one-year teacher datasets and learned rollouts belong.
+Notebook 01 focuses on halo-observer delta-v prediction and data diagnostics.
 """
 from pathlib import Path
 import nbformat
@@ -39,16 +39,16 @@ def test_notebook_00_keeps_original_motivation_and_visualizations():
     assert "run_paired_study(" not in text
 
 
-def test_notebook_01_exclusively_owns_one_year_generation_and_results():
+def test_notebook_01_focuses_on_delta_v_prediction():
     results = nbformat.read(NB01, as_version=4)
     text = _source(results)
     for required in (
-        "YEAR_DAYS = 365",
-        "generate_closed_loop_dataset(",
-        "fit_observer_policy(",
-        "run_paired_study(",
-        "observer_truth_position_departure_km",
+        "fit_delta_v_predictor(",
+        "d_y=3",
+        "Nonzero-target vector RMSE",
         "gateway_tracking_position_error_km",
+        "**not** optimize Gateway tracking error",
     ):
-        assert required in text, f"Notebook 01 missing annual study: {required}"
+        assert required in text, f"Notebook 01 missing prediction content: {required}"
+    assert "run_paired_study(" not in text
     assert "run_gateway_comparison(" not in text
