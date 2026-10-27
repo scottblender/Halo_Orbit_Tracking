@@ -10,7 +10,7 @@ import nbformat
 
 root=Path(__file__).resolve().parents[1]
 
-def execute_in_process(path):
+def execute_in_process(path, start_cell=0):
     """Execute one notebook in this fresh process with IPython rich output."""
     import matplotlib
     matplotlib.use('module://matplotlib_inline.backend_inline')
@@ -21,8 +21,12 @@ def execute_in_process(path):
     configure_inline_support(shell,'inline')
     import matplotlib.pyplot as plt
     notebook=nbformat.read(path,as_version=4)
-    count=0
-    for cell in notebook.cells:
+    if not 0 <= start_cell < len(notebook.cells):
+        raise ValueError('Start cell is outside the notebook')
+    count=sum(c.cell_type=='code' for c in notebook.cells[:start_cell])
+    if start_cell:
+        print(f'Preserving earlier cells; executing from cell {start_cell}',flush=True)
+    for cell in notebook.cells[start_cell:]:
         if cell.cell_type!='code':
             continue
         count+=1
@@ -51,9 +55,12 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--in-process',action='store_true',help='Use isolated IPython processes when kernel sockets are unavailable')
     parser.add_argument('--one',type=Path,help="Execute just this notebook (default: Notebook 01 only)")
+    parser.add_argument('--from-cell',type=int,default=0,help='Start at this zero-based cell in --one, preserving earlier outputs')
     args=parser.parse_args()
+    if args.from_cell and not args.one:
+        parser.error('--from-cell requires --one')
     if args.one:
-        execute_in_process(args.one)
+        execute_in_process(args.one,args.from_cell)
     else:
         paths=[root/'notebooks'/'01_narx_results.ipynb']
         for path in paths:

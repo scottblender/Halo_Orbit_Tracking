@@ -1,0 +1,196 @@
+{
+  "planned_days": 365,
+  "seed": 24017,
+  "completed_requested_span": true,
+  "last_simulated_day": 365.0,
+  "stop_reason": null,
+  "evaluated_samples": 364,
+  "planned_samples": 364,
+  "metric_sampling": "Decision epochs plus final endpoint; optical measurements every six hours plus decision epochs by default",
+  "rmse_interpretation": "RMS of 3-D error norms at sampled times, not per-axis or continuous-time RMSE",
+  "uncertainty_interpretation": "sqrt(trace(P_rr)) converted from normalized length to km; estimated RMS, not a confidence bound",
+  "total_delta_v_m_s": 39.80556080902093,
+  "maneuvers": 64,
+  "rmse": {
+    "halo_position_departure_km": 36.191263356789655,
+    "halo_velocity_departure_m_s": 0.634733573762455,
+    "halo_navigation_position_km": 0.25429595131428107,
+    "halo_navigation_velocity_m_s": 0.002397057716378801,
+    "gateway_position_km": 0.592325854382694,
+    "gateway_velocity_m_s": 0.015495907651310445
+  },
+  "uncertainty": {
+    "observer": {
+      "first_30_days_median_km": 0.07500444836123141,
+      "last_30_days_median_km": 0.020613022601288163,
+      "end_to_start_ratio": 0.27482400113141425,
+      "peak_km": 4.419262373733615
+    },
+    "gateway": {
+      "first_30_days_median_km": 0.07814660873887203,
+      "last_30_days_median_km": 0.031440894919410295,
+      "end_to_start_ratio": 0.40233217316531905,
+      "peak_km": 8.766696173199337
+    }
+  },
+  "halo_corridor_fraction": 0.9285714285714286,
+  "measurement_cadence_s": 21600.0,
+  "decisions_per_period": 8,
+  "decision_spacing_days": 1.007259102764151,
+  "gateway_reference_check": {
+    "period_tu": 1.51110546287394,
+    "period_days": 6.561945014660391,
+    "position_closure_km": 5.665651074774662e-06,
+    "velocity_closure_m_s": 3.387625227084155e-08,
+    "periodicity_verified_in": "Earth-Moon CR3BP",
+    "resonance": "nominal 9:2 NRHO; provenance from supplied seed, not independently reclassified",
+    "physical_model_limit": "idealized CR3BP, not a mission ephemeris"
+  },
+  "configuration": {
+    "mu": 0.01215058560962404,
+    "length_unit_km": 384400,
+    "time_unit_s": 375190.25852,
+    "orbit": {
+      "catalog_id": 241,
+      "catalog_secondary_id": 6,
+      "family": "SNRHL2",
+      "period_tu": 1.8572,
+      "stability_index": 1.6875,
+      "state": [
+        1.0444,
+        -0.0277,
+        -0.1879,
+        -0.0329,
+        -0.143,
+        0.081
+      ],
+      "source_precision": "four decimal places; not a corrected periodic solution"
+    },
+    "site": {
+      "latitude_deg": 30,
+      "longitude_east_deg": 270,
+      "radius_km": 1737.4,
+      "prime_meridian_phase_rad": 3.141592653589793,
+      "minimum_elevation_deg": 10
+    },
+    "simulation": {
+      "periods": 1,
+      "cadence_s": 1800,
+      "seed": 241
+    },
+    "estimation": {
+      "initial_position_sigma_km": 1,
+      "initial_velocity_sigma_km_s": 0.0001,
+      "acceleration_psd_normalized": 0
+    },
+    "measurement": {
+      "angle_sigma_arcsec": 1,
+      "angular_rate_sigma_arcsec_s": 0.01,
+      "rate_source": "independent",
+      "covariance_override": null
+    },
+    "gateway": {
+      "enabled": true,
+      "state": [
+        1.02202108343387,
+        0,
+        -0.182096487798513,
+        0,
+        -0.103255420206012,
+        0
+      ],
+      "period_tu": 1.51110546287394,
+      "source": "https://github.com/scottblender/Gradient-Free-Optimization-for-Cislunar-SDA-2/blob/main/scripts/build_target_case_database.m",
+      "reference_time_unit_s": 375695,
+      "phase_assumption": "Both supplied normalized states define phase zero at the model t=0; no mission epoch is implied."
+    },
+    "comparison": {
+      "gateway_position_sigma_km": 1,
+      "gateway_velocity_sigma_km_s": 0.0001,
+      "gateway_camera_sigma_arcsec": 1
+    },
+    "sensors": [
+      {
+        "name": "North 270",
+        "latitude_deg": 30,
+        "longitude_east_deg": 270
+      },
+      {
+        "name": "North 90",
+        "latitude_deg": 30,
+        "longitude_east_deg": 90
+      },
+      {
+        "name": "South 90",
+        "latitude_deg": -85,
+        "longitude_east_deg": 90
+      }
+    ],
+    "identification": {
+      "training_arcs": 20,
+      "validation_arcs": 5,
+      "test_arcs": 5,
+      "seed": 1022,
+      "position_spread_km": 1,
+      "velocity_spread_m_s": 0.1,
+      "arc_duration_periods": 2,
+      "decision_epochs_per_period": 4,
+      "measurement_cadence_s": 21600,
+      "trigger_position_km": 50,
+      "trigger_velocity_m_s": 0.5,
+      "limit_position_km": 100,
+      "limit_velocity_m_s": 1,
+      "maximum_impulse_m_s": 10,
+      "guidance_horizon_fraction": 0.25,
+      "regularization": 0.03
+    },
+    "optics": {
+      "lso_max_range_km": 250000,
+      "gateway_max_range_km": 250000,
+      "range_limit_note": "Illustrative target-dependent hard slant-range gates. Reflected-light flux falls with R^-2; the selected 250,000 km cap is a sensitivity assumption, not a universal instrument detection threshold.",
+      "sun_exclusion_deg": 20,
+      "earth_exclusion_deg": 10,
+      "moon_exclusion_deg": 0,
+      "sun_initial_phase_rad": 0,
+      "sun_inclination_deg": 0,
+      "sun_model": "planar bicircular relative motion (fixed initial Sun phase; not SPICE)"
+    },
+    "narx": {
+      "training_arcs": 20,
+      "validation_arcs": 5,
+      "test_arcs": 5,
+      "seed": 1022,
+      "arc_duration_periods": 2,
+      "decisions_per_period": 8,
+      "history_steps": 4,
+      "initial_position_spread_km": 0.03,
+      "initial_velocity_spread_m_s": 0.003,
+      "measurement_position_sigma_km": 0.01,
+      "measurement_velocity_sigma_m_s": 0.001,
+      "guidance_horizon_fraction": 0.25,
+      "candidate_delay_fractions": [
+        0,
+        0.0625,
+        0.125,
+        0.1875
+      ],
+      "regularization": 0.03,
+      "effort_penalty": 0.001,
+      "observer_guidance": {
+        "position_tolerance_km": 100,
+        "velocity_tolerance_m_s": 1,
+        "trigger_position_km": 50,
+        "trigger_velocity_m_s": 0.5,
+        "maximum_impulse_m_s": 10
+      },
+      "gateway_guidance": {
+        "position_tolerance_km": 0.1,
+        "velocity_tolerance_m_s": 0.01,
+        "trigger_position_km": 0.05,
+        "trigger_velocity_m_s": 0.005,
+        "maximum_impulse_m_s": 0.5
+      },
+      "closed_loop_measurement_cadence_s": 21600.0
+    }
+  }
+}

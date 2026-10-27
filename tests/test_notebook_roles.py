@@ -25,7 +25,7 @@ def test_notebook_00_keeps_original_motivation_and_visualizations():
         "Stability of the corrected nominal",
         "Growth of the uncontrolled halo departure",
         "without new measurements",
-        "One-year nominal reference and LSO geometry",
+        "Full-year STM station keeping and tracking",
     )
     for topic in required_topics:
         assert topic in text, f"Notebook 00 lost setup content: {topic}"
@@ -34,9 +34,13 @@ def test_notebook_00_keeps_original_motivation_and_visualizations():
         "image/png" in output.get("data", {})
         for cell in setup.cells for output in cell.get("outputs", [])
     )
-    assert figures >= 11, "Notebook 00 must retain its original embedded plots"
+    assert figures >= 13, "Notebook 00 must retain 11 earlier plots and add two STM figures"
     assert "generate_closed_loop_dataset(" not in text
     assert "run_paired_study(" not in text
+    assert "run_stm_baseline(" in text
+    assert "30-day RMSE" in text
+    assert "not an error bound" in text
+    assert "fit_reference_narx(" not in text
 
 
 def test_notebook_01_is_one_narx_against_stm_reference():

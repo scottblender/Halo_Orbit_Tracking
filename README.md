@@ -1,5 +1,11 @@
 # Halo burns: one NARX prediction and one STM reference
 
+[Notebook 00](notebooks/00_gateway_tracking_comparison.ipynb) now ends with a
+full-year STM station-keeping example: halo departure, tracking RMSE, estimated
+position uncertainty and first/last-month uncertainty changes. Its earlier
+11 saved figures are retained. The two new figures and underlying histories
+are saved under [artifacts/stm_baseline](artifacts/stm_baseline/).
+
 [Notebook 01](notebooks/01_narx_results.ipynb) asks two questions:
 
 - Does one `narxpy` network predict the reference delta-v and burn phase?
@@ -9,8 +15,8 @@ It contains three plots: **NARX versus STM burns**, **prediction residuals**
 (NARX minus STM), and **orbit departure after applying each burn sequence**.
 A short statistics table counts missed burns and measures delta-v and timing
 errors. A phase-count table shows which burn timings the training data cover.
-No other prediction models are compared in this notebook. Gateway tracking is
-left for later post-processing.
+No other prediction models are compared in Notebook 01. Notebook 00 now shows
+the STM reference tracking and uncertainty after station keeping.
 
 ## What STM and the burn procedure mean
 
@@ -52,7 +58,18 @@ Results, weights, figures and underlying arrays are saved in
 termination; missing future states are not filled in. Completing the year does
 not imply remaining inside the 100 km / 1 m/s comparison corridor.
 
-[Notebook 00](notebooks/00_gateway_tracking_comparison.ipynb) and its original
-visualizations remain unchanged. Earlier baselines, pure delta-v experiments,
+The earlier Notebook 00 analyses and their 11 figures are preserved; only its
+introduction and final supplement are revised for the new full-year STM case. Earlier baselines, pure delta-v experiments,
 and annual comparisons remain available in their existing source modules and
 artifact folders; Notebook 01 does not train or compare those additional models.
+
+To rerun only the new ending of Notebook 00 while keeping its earlier outputs:
+
+```sh
+python scripts/check_notebooks.py --one notebooks/00_gateway_tracking_comparison.ipynb --from-cell 26
+```
+
+STM post-processing saves both running and 30-day RMSE at decision epochs.
+Position uncertainty is `sqrt(trace(P_rr))` in km: an estimated RMS, not a
+confidence boundary. Finishing 365 days and meeting every departure/tracking
+limit are separate results.

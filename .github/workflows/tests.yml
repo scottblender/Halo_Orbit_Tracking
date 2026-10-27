@@ -18,15 +18,22 @@ jobs:
         env:
           OMP_NUM_THREADS: '1'
           OPENBLAS_NUM_THREADS: '1'
-      - name: Verify original Notebook 00 is unchanged
+      - name: Verify Notebook 01 execution did not change Notebook 00
         run: git diff --exit-code -- notebooks/00_gateway_tracking_comparison.ipynb
+      - name: Execute the full-year STM ending of Notebook 00
+        run: python scripts/check_notebooks.py --one notebooks/00_gateway_tracking_comparison.ipynb --from-cell 26
+        env:
+          OMP_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
       - name: Archive executed experiment and plots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: executed-neural-narx-experiment
           path: |
+            notebooks/00_gateway_tracking_comparison.ipynb
             notebooks/01_narx_results.ipynb
             artifacts/narx_stm_comparison/
+            artifacts/stm_baseline/
           if-no-files-found: error
           retention-days: 14

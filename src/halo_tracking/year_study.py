@@ -80,6 +80,7 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
         "observer_truth_position_departure_km": np.full(n, np.nan),
         "observer_truth_velocity_departure_m_s": np.full(n, np.nan),
         "observer_navigation_position_error_km": np.full(n, np.nan),
+        "observer_navigation_velocity_error_m_s": np.full(n, np.nan),
         "gateway_tracking_position_error_km": np.full(n, np.nan),
         "gateway_tracking_velocity_error_m_s": np.full(n, np.nan),
         "observer_covariance_trace_normalized": np.full(n, np.nan),
@@ -171,6 +172,7 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
             records["observer_truth_position_departure_km"][k] = pos
             records["observer_truth_velocity_departure_m_s"][k] = np.linalg.norm(physical[3:])
             records["observer_navigation_position_error_km"][k] = np.linalg.norm(nav_true[:3])
+            records["observer_navigation_velocity_error_m_s"][k] = np.linalg.norm(nav_true[3:])
             records["gateway_tracking_position_error_km"][k] = np.linalg.norm(gw_error[:3])
             records["gateway_tracking_velocity_error_m_s"][k] = np.linalg.norm(gw_error[3:])
             records["observer_covariance_trace_normalized"][k] = np.trace(P[:3, :3])

@@ -1,0 +1,10 @@
+{
+  "completed_days": 365,
+  "tests_passed": 52,
+  "new_figures": 2,
+  "earlier_figures_preserved": 11,
+  "earlier_code_and_outputs_preserved": true,
+  "notebook01_unchanged": true,
+  "execution": "New Notebook 00 ending executed in a fresh process; earlier saved outputs preserved",
+  "matches_notebook01_STM_reference_histories": true
+}
