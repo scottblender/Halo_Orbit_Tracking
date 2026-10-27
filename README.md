@@ -55,7 +55,7 @@ To reproduce the one-pair 365-day pilot from the checkout:
 
 ```bash
 python -m pip install -e ".[dev]"
-python scripts/run_one_year_study.py --days 365 --arcs 1 --measurement-cadence-s 86400 --decisions-per-period 4
+python scripts/run_one_year_study.py --days 365 --arcs 1 --measurement-cadence-s 21600 --decisions-per-period 8
 python scripts/check_notebooks.py
 ```
 
@@ -82,3 +82,16 @@ maneuver counts, first corridor exit, and Gateway tracking/visibility.
 A one-pair pilot demonstrates numerical behavior, not a reliable population
 success probability; larger independent training and test ensembles and
 higher-fidelity dynamics/measurements are future validation priorities.
+
+## NARX rollout validation
+
+The learned policy currently uses explicit lagged error/action features and scikit-learn gradient-boosting models, **not MATLAB's recurrent `narxnet`**. Both its optical cadence and decisions per halo period must match the teacher data; `run_paired_study` raises an error on a mismatch. Previous one-arc figures using 24-hour observations and four decisions per period are **not a controlled match** to the default six-hour, eight-decision teacher dataset and should not be used as conclusive NARX suitability evidence.
+
+After generating the teacher splits and matched yearly rollout, run:
+
+```bash
+python scripts/inspect_narx_rollout.py
+python scripts/diagnose_narx_suitability.py
+```
+
+The first script checks lagged navigation/action alignment, count of feasible and rejected labels, prints prior `arc_metrics.csv` termination reasons and saves first-40-day departure/burn figures under `results/one_year/narx_suitability/`. The year-long rollout records learned model invocation, predicted burn/delay, and invalid commands in the trajectory NPZ, while `arc_metrics.csv` includes the stop reason. No post-termination state is inferred. These diagnostics do not replace a genuine matched closed-loop Monte Carlo study or the proposed teacher-oracle ablations.
