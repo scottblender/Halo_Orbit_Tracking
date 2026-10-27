@@ -1,0 +1,41 @@
+# Why the current NARX-inspired policy fails, and what to test next
+
+## What the STM does
+
+STM means **state transition matrix**, not a trained model. The variational equations linearize the nonlinear Earth–Moon CR3BP dynamics about the corrected reference halo orbit. Their matrix \\(\\Phi(t_f,t_k)\\) maps a small perturbation at a decision epoch to a predicted perturbation at a future targeting time. Its velocity-input columns estimate how an instantaneous three-axis burn changes the future position/state error. Guidance chooses an impulse from this sensitivity and checks proposed corrections using nonlinear propagation, under the implementation's constraints. The STM is locally valid; nonlinear checks mitigate but do not remove limitations of the linearization. It uses the current estimated observer state, dynamical model, and reference, not imitation-learning examples.
+
+## What the current learner actually is
+
+The NARX-inspired controller is a **gradient-boosted tabular model with lagged inputs**, rather than a recurrent NARX neural network. It separately (1) classifies whether a maneuver is needed, (2) predicts three burn components on feasible positive teacher examples, and (3) predicts burn-delay class. Deployment uses the model's own outputs with no STM fallback. Thus all three decisions must be sufficiently accurate for closed-loop survival.
+
+### Latest saved pilot results (one paired arc, not a probability estimate)
+
+| Controller | Day 365 reached | First 100 km / 1 m/s corridor exit (day) | Last simulated day | Accumulated executed delta-v (m/s) |
+|---|---|---:|---:|---:|
+| Uncontrolled | No | 6.0 | 44.1 | 0 |
+| STM | Yes | 24.1 | 365.0 | 68.74 |
+| NARX-inspired | No | 6.0 | 40.1 | 6.15 |
+
+Held-out teacher imitation: maneuver F1 0.533; recall 0.444; delta-v component RMSE 0.310 m/s. The NARX trajectory exits the corridor at the same day as uncontrolled, and stops earlier; it does not demonstrate effective annual station-keeping. STM *does* complete 365 days but **does not satisfy the entire-year corridor criterion**, so it is a useful survival baseline, not a fully successful stringent control baseline. The accumulated control expenditures above cover unequal durations and cannot be compared as equal-horizon fuel requirements.
+
+## Hypotheses versus demonstrated causes
+
+Low offline maneuver recall means some teacher-requested maneuvers are missed. The difference in annual duration and first-exit times is **consistent** with missed or weak/incorrect burns, but the current pilot does not isolate which mechanism caused each departure. Differences in feasible-label coverage, timing errors, state estimation, distribution shift as predicted burns change subsequent observations, and unstable local CR3BP dynamics may compound the problem. The 0.310 m/s RMSE is assessed only on feasible teacher maneuvers with their true burn condition; it does not measure the model's complete executed action. The data do not justify saying the classifier is the *only* cause.
+
+## Reproducible suitability screening
+
+Run `python scripts/diagnose_narx_suitability.py` **after** Notebook 01 generates `results/one_year/teacher_training/{training,validation,test}.npz`. The script holds out entire arcs, fits only on training, and compares constant, logistic/ridge, depth-limited CART decision tree, and the current boosted NARX-inspired baseline. It writes `results/one_year/narx_suitability/diagnostics.json` and `offline_baselines.png`. Report test maneuver precision/recall/F1, false negatives, infeasible-trigger counts, and delta-v vector RMSE conditional on feasible teacher burns. These are offline diagnostic outcomes, **not closed-loop evidence**. Do not select hyperparameters on test results; tune on validation and then evaluate test once.
+
+## Decisive next experiment
+
+1. Inspect a time-aligned early failure trace: teacher-required burn, teacher feasible/rejected, classifier decision, predicted/teacher burn delay, command magnitude, execution event, estimated observer departure and first corridor exit.
+2. Run a **teacher timing oracle** ablation: execute the learned delta-v vector *only* at the teacher's feasible burn times. Separately run a **teacher vector oracle** with learned trigger/timing. These are **diagnostic oracle controllers, not deployable policies**, and should be matched in initial states, noise, navigation and horizon.
+3. Verify the teacher itself against the corridor. If STM cannot satisfy the 100 km / 1 m/s requirement, report completion and corridor compliance separately and revisit control cadence, constraints or teacher design before training a policy to imitate it.
+4. Repeat paired year-long evaluation across independent seeds and report number of early exits, last simulated day, time in corridor, total delta-v over equivalent observation horizons and successful full-year corridor compliance.
+5. To test model memory, compare history lengths using the same train/validation/test *trajectory split*. A non-recurrent model can still exploit explicit lag features, but it is not sufficient to label it a recurrent NARX.
+
+## What to try after NARX
+
+**A single CART decision tree is a good interpretability baseline**, particularly to visualize decision conditions for the burn/no-burn classifier, but it is prone to unstable thresholds and high variance with relatively few feasible labels, and piecewise-constant delta-v outputs are not an obviously safe primary controller. Compare the constrained depth-4 tree in the diagnostic script rather than assuming it is superior.
+
+For a stronger next supervised baseline, try **regularized linear/ridge prediction** first, followed by a **random forest or gradient-boosted regression** with the *same* feasible-target masks and features. The current learner already uses gradient boosting; another boosted tree is not a fundamentally different model. If the goal is reliable station-keeping rather than teacher imitation, a **model-predictive control (MPC)** formulation using the CR3BP propagation/STM is a more meaningful alternative: recompute physically feasible corrections as new navigation data arrive. MPC is more computationally demanding but avoids relying on a small, fixed imitation dataset for every intervention. Any proposed learned controller needs independent closed-loop validation against the model-based baseline.
