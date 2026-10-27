@@ -13,6 +13,8 @@ from halo_tracking.study import load_config
 from halo_tracking.closed_loop_narx import generate_closed_loop_dataset
 from halo_tracking.two_stage_narx import evaluate_two_stage, fit_observer_policy
 from halo_tracking.year_study import run_paired_study
+from halo_tracking.neural_narx import fit_neural_policy
+from halo_tracking.narx_audit import audit_dataset
 
 
 def main():
@@ -30,11 +32,15 @@ def main():
 
     cfg = load_config()
     cfg["narx"]["training_arcs"] = args.training_arcs
+    cfg["narx"]["decisions_per_period"] = args.decisions_per_period
+    cfg["narx"]["closed_loop_measurement_cadence_s"] = args.measurement_cadence_s
     dataset = args.output / "teacher_training"
     if not args.reuse_training or not all((dataset / (split + ".npz")).exists()
                                         for split in ("training", "validation", "test")):
         print("Generating independent short-arc STM teaching data...", flush=True)
         generate_closed_loop_dataset(cfg, dataset)
+    audit_dataset(dataset, cfg)
+    neural, _ = fit_neural_policy(dataset, cfg, args.output / "neural")
     print("Training observer-only predictors...", flush=True)
     model = fit_observer_policy(dataset, cfg, args.output / "observer_narx.joblib")
     offline = evaluate_two_stage(dataset, args.output / "offline", cfg)
@@ -42,7 +48,7 @@ def main():
     results = run_paired_study(
         cfg, args.output, model, days=args.days, arcs=args.arcs,
         seed=args.seed, measurement_cadence_s=args.measurement_cadence_s,
-        decisions_per_period=args.decisions_per_period)
+        decisions_per_period=args.decisions_per_period, neural_bundle=neural)
     print("One-year comparison:", json.dumps(results["aggregate"], indent=2), flush=True)
     print("Saved:", args.output / "summary.json", args.output / "arc_metrics.csv", flush=True)
 

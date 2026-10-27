@@ -92,10 +92,12 @@ def generate_closed_loop_dataset(cfg, directory):
         "observer": np.asarray(Tcfg["orbit"]["state"], dtype=float),
         "gateway": np.asarray(cfg["gateway"]["state"], dtype=float),
     }
-    reference = {name: _reference(state, horizon + T, cfg)
-                 for name, state in initial_ref.items()}
+    from .gateway_reference_periodic import gateway_periodic_reference
+    cycle = _reference(initial_ref['observer'], T, cfg)
+    gateway_at, _ = gateway_periodic_reference(cfg)
+    reference = {'observer': lambda t: cycle(float(t) % T), 'gateway': gateway_at}
     # Gateway is a prescribed target ephemeris; it is never commanded to burn.
-    # Its supplied state is NOT yet verified as a periodic 9:2 NRHO.
+    # Its supplied seed is closure-checked below before periodic repetition.
     scales = np.r_[np.full(3, 1 / cfg["length_unit_km"]),
                    np.full(3, cfg["time_unit_s"] / (1000 * cfg["length_unit_km"]))]
     # Covariance describes the initial physical state dispersion and the
@@ -287,7 +289,7 @@ def generate_closed_loop_dataset(cfg, directory):
     (out / "metadata.json").write_text(json.dumps(dict(
         purpose="Covariance-driven Monte Carlo applied-control trajectories for phase-aware NARX",
         initial_sampling="Observer physical initial state and navigation error are sampled independently; Gateway truth remains on the nominal ephemeris, while Gateway navigation error is sampled from its filter prior.",
-        assumptions="Only the halo observer executes guidance maneuvers, with LSO-derived EKF navigation. Gateway truth follows a prescribed nominal CR3BP ephemeris, without station-keeping or physical scatter. Supplied Gateway initial conditions are not validated as a periodic 9:2 NRHO; no execution-error model.",
+        assumptions="Only the halo observer executes guidance maneuvers, with LSO-derived EKF navigation. Gateway truth follows a prescribed nominal CR3BP ephemeris, without station-keeping or physical scatter. Gateway reference is closure-validated and periodically repeated; no execution-error model.",
         interpretation="Gateway tracking metrics compare EKF estimate against simulated Gateway truth; guidance uses reference departure.",
         configuration=s, summary=summary), indent=2) + "\n")
     return summary

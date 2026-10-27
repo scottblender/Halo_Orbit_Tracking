@@ -1,0 +1,41 @@
+{
+  "training": {
+    "nonlinear_targets_replayed": 59,
+    "applied_targets_verified": true,
+    "arcs": 20,
+    "history_steps": 4,
+    "feasible_burns": 59,
+    "rejected_teacher_labels": 0,
+    "decision_spacing_days": 1.007259102764151,
+    "measurement_cadence_s": 21600.0,
+    "input_units": "MCI departure km,m/s; phase/visibility/count/log normalized covariance",
+    "target_units": "rotating-frame delta-v m/s; delay TU",
+    "causal_histories_verified": true
+  },
+  "validation": {
+    "nonlinear_targets_replayed": 13,
+    "applied_targets_verified": true,
+    "arcs": 5,
+    "history_steps": 4,
+    "feasible_burns": 13,
+    "rejected_teacher_labels": 0,
+    "decision_spacing_days": 1.007259102764151,
+    "measurement_cadence_s": 21600.0,
+    "input_units": "MCI departure km,m/s; phase/visibility/count/log normalized covariance",
+    "target_units": "rotating-frame delta-v m/s; delay TU",
+    "causal_histories_verified": true
+  },
+  "test": {
+    "nonlinear_targets_replayed": 14,
+    "applied_targets_verified": true,
+    "arcs": 5,
+    "history_steps": 4,
+    "feasible_burns": 14,
+    "rejected_teacher_labels": 0,
+    "decision_spacing_days": 1.007259102764151,
+    "measurement_cadence_s": 21600.0,
+    "input_units": "MCI departure km,m/s; phase/visibility/count/log normalized covariance",
+    "target_units": "rotating-frame delta-v m/s; delay TU",
+    "causal_histories_verified": true
+  }
+}

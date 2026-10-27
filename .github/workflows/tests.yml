@@ -3,33 +3,30 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install -e ".[dev,neural-narx]"
       - run: python -m pytest
-      - run: python scripts/check_notebooks.py
+      - name: Execute Notebook 01 only; preserve Notebook 00 byte for byte
+        run: python scripts/check_notebooks.py --in-process
         env:
-          HALO_GATEWAY_PERIODS: '2'
-      - name: Archive executed notebook
+          OMP_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
+      - name: Verify original Notebook 00 is unchanged
+        run: git diff --exit-code -- notebooks/00_gateway_tracking_comparison.ipynb
+      - name: Archive executed experiment and plots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: executed-gateway-tracking-notebook
-          path: notebooks/*.ipynb
+          name: executed-neural-narx-experiment
+          path: |
+            notebooks/01_narx_results.ipynb
+            artifacts/neural_narx/
           if-no-files-found: error
           retention-days: 14
-      - name: Commit notebook execution outputs to main
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]' && success()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add notebooks/*.ipynb
-          if ! git diff --cached --quiet; then
-            git commit -m "Save executed notebook outputs [skip ci]"
-            git push origin HEAD:main
-          fi

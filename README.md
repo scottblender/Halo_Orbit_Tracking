@@ -1,97 +1,86 @@
-# One-year halo observer NARX station-keeping and Lunar Gateway tracking
+# Halo observer station-keeping: STM, gradient boosting and neural NARX
 
-This repository studies 365-day station-keeping for an Earth–Moon CR3BP halo observer
-using LSO optical measurements and a coupled navigation EKF, while estimating
-Lunar Gateway on a prescribed nominal 9:2 NRHO.
+[Notebook 00](notebooks/00_gateway_tracking_comparison.ipynb) retains its original
+motivation, tracking analyses, embedded figures and outputs byte for byte.
+[Notebook 01](notebooks/01_narx_results.ipynb) is the complete executable neural
+NARX experiment, with saved results and figures.
 
-## Notebooks — start here
+Notebook 01 regenerates independent STM training/validation/test trajectories
+(20/5/5 arcs), trains the original gradient-boosted baseline and a genuine
+`narxpy==0.1.0` network, reports held-out teacher-forced and recursive metrics,
+and executes five paired 365-day nonlinear CR3BP trials for four controllers:
+uncontrolled, STM, gradient-boosted, and neural NARX. No learned controller uses
+an STM fallback. The original baseline implementation remains available in
+`two_stage_narx.py`; the historical `narx` trajectory filename denotes that baseline.
 
-- [00 — Problem motivation, LSO geometry and uncontrolled tracking baseline](notebooks/00_gateway_tracking_comparison.ipynb):
-  restored observer/Gateway tracking visualizations, three-LSO navigation,
-  observability, orbit stability and departure, optical-blackout prediction,
-  validated periodic references, and optional one-year nominal visibility.
-- [01 — One-year STM vs NARX results](notebooks/01_narx_results.ipynb):
-  short-arc teacher training, held-out offline NARX scores, actual 365-day
-  uncontrolled/STM/NARX rollouts, observer departure, cumulative Δv,
-  and Gateway tracking plots.
+The neural architecture has four input and four output feedback delays,
+11 exogenous variables, 64 tanh hidden units and eight linear command outputs.
+Training uses past teacher commands; deployment feeds back past neural predictions.
+Inputs use estimated MCI departure in km/m/s and navigation context; burn outputs
+use rotating-frame m/s and one of four nonnegative delays. See Notebook 01 for
+the equations, indexing convention, warmup, scaling, decoding and limitations.
+`narxpy` was installed and used directly; no compatibility fallback was needed.
 
-All original Notebook 00 analyses and plot outputs are restored and retained
-as the problem motivation. One-year learned station-keeping dataset generation,
-closed-loop control and measured results are exclusively in Notebook 01.
+## Reproduce
 
-## Model and comparison
+Use Python 3.10 or later with wheels supported by PyTorch. The verified local
+runtime and package versions are saved with the experiment.
 
-1. **Observer reference:** differential-corrected periodic CR3BP halo.
-2. **Gateway target:** a supplied nominal 9:2 NRHO state is numerically checked
-   for periodic closure within the same CR3BP, then repeated as a prescribed
-   truth trajectory. Gateway receives **zero station-keeping commands**.
-   This does not validate its operational ephemeris or independently prove
-   the 9:2 family designation.
-3. **Measurements:** three LSOs supply simulated noisy optical angles to the
-   joint EKF. Observer-to-Gateway angles are accepted when visible.
-4. **STM control:** computes and executes an observer-only nonlinear-checked
-   state-transition-matrix maneuver from the estimated observer state.
-5. **NARX control:** a supervised, gradient-boosted *NARX-inspired* predictor
-   executes predicted observer burn decisions, Δv vectors and delays, with no
-   STM fallback at deployment. It is not a recurrent NARX neural network.
-6. **Fair paired trials:** uncontrolled/STM/NARX alternatives use identical
-   initial physical/navigation errors and per-epoch simulated measurement-noise
-   draws; geometry-dependent measurement acceptance can differ by controller.
-
-Early numerical termination or excessive departure is counted as unsuccessful
-for all remaining epochs. RMSE for a failed arc uses only simulated epochs and
-must not be described as full-year tracking accuracy.
-
-## Plots on GitHub
-
-Static GitHub notebook previews show plots **only when their outputs are saved**.
-The [one-year pilot workflow](https://github.com/scottblender/Halo_Orbit_Tracking/actions/workflows/one-year-pilot.yml)
-generates real 365-day trajectories, executes both notebooks, and saves
-embedded figures in its artifact. For in-repository PR branches, the workflow
-also attempts to commit these executed notebook outputs to the PR branch.
-The Scientific Checks workflow saves executed notebook outputs on main.
-
-To reproduce the one-pair 365-day pilot from the checkout:
-
-```bash
-python -m pip install -e ".[dev]"
-python scripts/run_one_year_study.py --days 365 --arcs 1 --measurement-cadence-s 21600 --decisions-per-period 8
-python scripts/check_notebooks.py
+```sh
+python -m pip install -e ".[dev,neural-narx]"
+python -m pytest -q
+python scripts/check_notebooks.py --one notebooks/01_narx_results.ipynb
 ```
 
-For five paired one-year test arcs and plots that use the same data:
+The notebook runner uses an isolated IPython process and embeds PNG outputs.
+Its default selection is Notebook 01 only. It never rewrites Notebook 00 unless
+that file is explicitly selected. On Windows, use a short checkout path if
+package installation encounters the Windows path-length limit. Set temporary,
+Matplotlib and IPython directories to writable paths if required by the host.
 
-```bash
-python scripts/run_one_year_study.py --days 365 --arcs 5
-HALO_YEAR_REUSE=1 HALO_YEAR_ARCS=5 HALO_YEAR_CADENCE_S=21600 HALO_YEAR_DECISIONS=8 python scripts/check_notebooks.py
+For a command-line study without notebook figures:
+
+```sh
+python scripts/run_one_year_study.py --days 365 --arcs 5 --output results/one_year
 ```
 
-On Windows PowerShell, set the displayed environment variables with
-`$env:VARIABLE='value'` before calling the notebook checker.
+`--measurement-cadence-s` and `--decisions-per-period` also configure newly
+generated teacher data. Reused datasets must match the requested configuration;
+the audit rejects mismatches. Annual decisions use exactly the teacher spacing,
+with an evaluation-only endpoint at day 365.
 
-Machine-readable annual results are saved in `results/one_year/` as
-`summary.json`, `arc_metrics.csv`, and per-controller NPZ histories, with
-the observer learned-policy bundle and PNG plots.
+## Verified run
 
-## Scientific interpretation
+The saved run trained the neural network for 600 epochs (validation selected
+epoch 110) and executed all 20 controller episodes across five paired annual
+trials. STM completed 365 days in 5/5 trials; uncontrolled, gradient-boosted and
+neural NARX completed 0/5, all stopping at the departure cutoff. No controller
+maintained the full-year corridor. Recursive held-out neural feasible-burn RMSE
+was 0.304 m/s, with 11.1% feasible-command recall. These results demonstrate
+execution, not successful learned station-keeping. The test suite passed all
+44 tests; saved checkpoint replay reproduced 213 recorded online neural outputs.
 
-A policy **completing 365 days** may still violate its allowable
-position/velocity departure corridor during the year. Report full-year
-completion separately from corridor compliance. Compare paired annual Δv,
-maneuver counts, first corridor exit, and Gateway tracking/visibility.
-A one-pair pilot demonstrates numerical behavior, not a reliable population
-success probability; larger independent training and test ensembles and
-higher-fidelity dynamics/measurements are future validation priorities.
+## Saved evidence
 
-## NARX rollout validation
+[artifacts/neural_narx](artifacts/neural_narx/) contains the independently
+inspectable training splits, training-loss history, selected neural weights,
+baseline model, held-out metrics, consistency audit, annual trajectory NPZ files,
+paired initial conditions and complete noise arrays, per-arc CSV metrics,
+summary JSON, configuration, runtime versions, and PNG plots. Notebook outputs
+also embed the figures for GitHub previews. The audit independently replays every
+feasible STM target through nonlinear dynamics and verifies causal histories,
+unit conversions, delay membership, and agreement with executed teacher burns.
 
-The learned policy currently uses explicit lagged error/action features and scikit-learn gradient-boosting models, **not MATLAB's recurrent `narxnet`**. Both its optical cadence and decisions per halo period must match the teacher data; `run_paired_study` raises an error on a mismatch. Previous one-arc figures using 24-hour observations and four decisions per period are **not a controlled match** to the default six-hour, eight-decision teacher dataset and should not be used as conclusive NARX suitability evidence.
+Training and deployment use the same corrected periodic observer reference,
+closure-validated prescribed Gateway reference, six-hour optical cadence plus
+decision epochs, and eight decisions per observer period. Controller alternatives
+share initial physical/navigation errors and epoch-indexed optical noise;
+geometry-dependent measurement acceptance can differ. Gateway never receives burns.
 
-After generating the teacher splits and matched yearly rollout, run:
-
-```bash
-python scripts/inspect_narx_rollout.py
-python scripts/diagnose_narx_suitability.py
-```
-
-The first script checks lagged navigation/action alignment, count of feasible and rejected labels, prints prior `arc_metrics.csv` termination reasons and saves first-40-day departure/burn figures under `results/one_year/narx_suitability/`. The year-long rollout records learned model invocation, predicted burn/delay, and invalid commands in the trajectory NPZ, while `arc_metrics.csv` includes the stop reason. No post-termination state is inferred. These diagnostics do not replace a genuine matched closed-loop Monte Carlo study or the proposed teacher-oracle ablations.
+Completing 365 days does not imply compliance with the 100 km/1 m/s corridor.
+All unevaluated epochs after termination count as unsuccessful. Failed-arc RMSE
+and delta-v cover only simulated time and must not be called full-year accuracy
+or fuel savings. See `arc_metrics.csv` for termination reasons and valid counts.
+The experiment is an idealized CR3BP/navigation study with a small ensemble,
+not an operational ephemeris or reliability certification. See the final
+Notebook 01 discussion for measured differences between STM and learned NARX.

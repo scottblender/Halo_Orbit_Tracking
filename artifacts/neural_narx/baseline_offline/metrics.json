@@ -1,0 +1,48 @@
+{
+  "observer": {
+    "status": "evaluated",
+    "training_decisions": 260,
+    "training_triggered": 41,
+    "training_feasible_triggered": 41,
+    "validation": {
+      "evaluated_decisions": 65,
+      "positive_rate": 0.12307692307692308,
+      "maneuver_precision": 0.8571428571428571,
+      "maneuver_recall": 0.75,
+      "maneuver_f1": 0.8,
+      "confusion_matrix_true_rows": [
+        [
+          56,
+          1
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "feasible_burn_examples": 8,
+      "delta_v_rmse_m_s": 0.25502563278874685,
+      "burn_delay_class_accuracy_teacher_forced": 0.75
+    },
+    "test": {
+      "evaluated_decisions": 65,
+      "positive_rate": 0.13846153846153847,
+      "maneuver_precision": 0.6666666666666666,
+      "maneuver_recall": 0.4444444444444444,
+      "maneuver_f1": 0.5333333333333333,
+      "confusion_matrix_true_rows": [
+        [
+          54,
+          2
+        ],
+        [
+          5,
+          4
+        ]
+      ],
+      "feasible_burn_examples": 9,
+      "delta_v_rmse_m_s": 0.30956672411910574,
+      "burn_delay_class_accuracy_teacher_forced": 0.7777777777777778
+    }
+  }
+}

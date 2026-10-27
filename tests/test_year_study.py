@@ -46,6 +46,7 @@ def test_paired_rollouts_use_same_perturbations_and_never_burn_gateway(tmp_path)
     cfg = load_config()
     cfg["narx"]["history_steps"] = 1
     model = _never_burn()
+    cfg["narx"]["closed_loop_measurement_cadence_s"] = 3600.
     # Very short deterministic integration exercises all three controllers
     # without requiring a 365-day run inside routine CI.
     summary = run_paired_study(cfg, tmp_path, model, days=.12, arcs=1,
@@ -54,9 +55,9 @@ def test_paired_rollouts_use_same_perturbations_and_never_burn_gateway(tmp_path)
     assert set(summary["aggregate"]) == {"uncontrolled", "stm", "narx"}
     for name in summary["aggregate"]:
         with np.load(tmp_path / f"{name}_arc_000.npz") as d:
-            assert d["decision_times_tu"].shape[0] == 3
+            assert d["decision_times_tu"].shape[0] == 2
             assert np.isfinite(d["gateway_tracking_position_error_km"]).all()
-            assert d["applied_delta_v_rotating_m_s"].shape == (3, 3)
+            assert d["applied_delta_v_rotating_m_s"].shape == (2, 3)
     with np.load(tmp_path / "uncontrolled_arc_000.npz") as d:
         np.testing.assert_array_equal(d["applied_delta_v_rotating_m_s"], 0.)
     with np.load(tmp_path / "narx_arc_000.npz") as d:

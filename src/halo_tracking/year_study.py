@@ -1,6 +1,6 @@
 """Paired uncontrolled / STM / learned-NARX year-long observer station-keeping.
 
-All three policies receive identical initial physical/navigation perturbations
+All policies receive identical initial physical/navigation perturbations
 and epoch-indexed independent standard-normal optical errors. Optical
 acceptance depends on each policy's real geometry, but a common source draw
 is used at every station and epoch. Gateway follows a closure-verified 9:2
@@ -60,9 +60,9 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
     Returns full time-aligned arrays. Missing observations after a numerical
     failure or large departure remain NaN and are counted as NOT successful.
     """
-    if controller not in ("uncontrolled", "stm", "narx"):
+    if controller not in ("uncontrolled", "stm", "narx", "neural_narx"):
         raise ValueError("Unknown controller")
-    if controller == "narx" and model is None:
+    if controller in ("narx", "neural_narx") and model is None:
         raise ValueError("NARX rollout requires a fitted training-only model")
     if max_departure_km <= 0:
         raise ValueError("max_departure_km must be positive")
@@ -93,12 +93,27 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
         "predicted_valid": np.zeros(n, dtype=bool),
         "model_invoked": np.zeros(n, dtype=bool),
         "applied_delta_v_rotating_m_s": np.zeros((n, 3)),
+        "delta_v_cost_m_s": np.zeros(n),
+        "executed_burn_count": np.zeros(n, dtype=int),
+        "neural_raw_output": np.full((n, 8), np.nan),
+        "neural_exogenous_input": np.full((n, 11), np.nan),
+        "neural_gate_score": np.full(n, np.nan),
+        "neural_feedback_norm": np.full(n, np.nan),
+        "neural_input_max_abs_z": np.full(n, np.nan),
     }
+    neural = None
+    if controller == "neural_narx":
+        from .neural_narx import NeuralController
+        if model["history_steps"] != L:
+            raise ValueError("Training/deployment history length mismatch")
+        neural = NeuralController(model)
     nav_history = []
     applied = records["applied_delta_v_rotating_m_s"]
     previous = 0.
     pending = None
     executed = np.zeros(3)
+    executed_cost = 0.
+    executed_count = 0
     halted = None
     k = 0
     # The same pre-sampled noise arrays are indexed by epoch, not by accepted
@@ -121,12 +136,14 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
         previous = t
 
     def execute():
-        nonlocal pending, executed
+        nonlocal pending, executed, executed_cost, executed_count
         if pending is not None:
             burn = pending[1]
             truth[3:6] += velocity_scale * burn
             x[3:6] += velocity_scale * burn
             executed += burn
+            executed_cost += float(np.linalg.norm(burn))
+            executed_count += 1
             pending = None
 
     for i, t in enumerate(sensors):
@@ -161,13 +178,36 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
             records["lso_visible_count"][k] = int(visible.sum())
             records["gateway_visible"][k] = float(target_visible)
             applied[k] += executed
+            records['delta_v_cost_m_s'][k] += executed_cost
+            records['executed_burn_count'][k] += executed_count
+            executed_cost, executed_count = 0., 0
             executed[:] = 0.
             nav_history.append(nav)
             if pos > max_departure_km:
                 halted = "departure_cutoff"
                 k += 1
                 break
-            if pending is None and controller == "stm":
+            if k == n - 1:
+                # Terminal evaluation is not an off-cadence policy decision.
+                command = dict(required=False,valid=True,burn=np.zeros(3),delay_tu=0.)
+            elif neural is not None:
+                current = np.r_[nav, np.sin(2*np.pi*t/observer_period),
+                    np.cos(2*np.pi*t/observer_period), float(target_visible),
+                    float(visible.sum()), np.log10(max(np.trace(P[:3,:3]), 1e-30))]
+                command = neural.command(current, observer_period,
+                    settings["maximum_impulse_m_s"], pending=pending is not None)
+                records['neural_raw_output'][k] = neural.outputs[-1]
+                records['neural_exogenous_input'][k] = current
+                records['neural_gate_score'][k] = neural.outputs[-1][0]
+                records['neural_feedback_norm'][k] = np.linalg.norm(neural.outputs[-1])
+                records['neural_input_max_abs_z'][k] = np.max(np.abs((current-model['x_mean'])/model['x_scale']))
+                if not np.isfinite(neural.outputs[-1]).all():
+                    raise FloatingPointError('Nonfinite neural output feedback')
+                records["model_invoked"][k] = command["invoked"]
+                records["predicted_valid"][k] = command["valid"]
+                records["predicted_delta_v_rotating_m_s"][k] = command["burn"]
+                records["predicted_delay_tu"][k] = command["delay_tu"]
+            elif pending is None and controller == "stm":
                 command = _optimal_phase(t, x[:6], observer_reference, cfg, settings)
             elif pending is None and controller == "narx" and k >= L:
                 feature = np.r_[np.asarray(nav_history[k-L+1:k+1]).reshape(-1),
@@ -196,12 +236,22 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
                     if command["delay_tu"] == 0:
                         execute()
                         applied[k] += executed
+                        records['delta_v_cost_m_s'][k] += executed_cost
+                        records['executed_burn_count'][k] += executed_count
+                        executed_cost, executed_count = 0., 0
                         executed[:] = 0.
             k += 1
         except (ValueError, OverflowError, FloatingPointError, RuntimeError,
                 np.linalg.LinAlgError, ZeroDivisionError) as exc:
             halted = f"{type(exc).__name__}: {exc}"
             break
+    if executed_count:
+        # Preserve the cost of burns executed before a later integration or
+        # measurement failure, even if the next decision state is unavailable.
+        slot = min(k,n-1)
+        applied[slot] += executed
+        records['delta_v_cost_m_s'][slot] += executed_cost
+        records['executed_burn_count'][slot] += executed_count
     records["decision_times_tu"] = times
     records["day"] = times * cfg["time_unit_s"] / 86400.
     records["completed_full_span"] = bool(k == n and halted is None)
@@ -221,7 +271,7 @@ def _one_arc_summary(episode, cfg, controller, arc):
     valid_g = np.isfinite(gp) & np.isfinite(gv)
     within_g = valid_g & (gp <= 0.1) & (gv <= 0.01)
     impulses = episode["applied_delta_v_rotating_m_s"]
-    count = np.count_nonzero(np.linalg.norm(impulses, axis=1) > 1e-12)
+    count = episode["executed_burn_count"].sum()
     def finite_max(x):
         return float(np.max(x[np.isfinite(x)])) if np.isfinite(x).any() else None
     def finite_rmse(x):
@@ -235,7 +285,7 @@ def _one_arc_summary(episode, cfg, controller, arc):
                 corridor_fraction=float(corridor.mean()),
                 maximum_observer_departure_km=finite_max(p),
                 maximum_observer_velocity_departure_m_s=finite_max(v),
-                delta_v_total_m_s=float(np.linalg.norm(impulses, axis=1).sum()),
+                delta_v_total_m_s=float(episode["delta_v_cost_m_s"].sum()),
                 executed_burn_records=int(count),
                 requested_burns=int(episode["maneuver_requested"].sum()),
                 rejected_burns=int(episode["maneuver_rejected"].sum()),
@@ -252,11 +302,11 @@ def _one_arc_summary(episode, cfg, controller, arc):
 
 def run_paired_study(cfg, output_dir, bundle, days=365, arcs=5, seed=24017,
                      measurement_cadence_s=21600, decisions_per_period=8,
-                     max_departure_km=20000.):
-    """Run paired policy rollouts and save independently inspectable outputs.
+                     max_departure_km=20000., neural_bundle=None):
+    """Run paired three/four-policy rollouts and save inspectable outputs.
 
     The same initial states and complete epoch-indexed optical noise arrays
-    are used for all three policies within each arc. No test arc is trained on.
+    are used for all policies within each arc. No test arc is trained on.
     """
     if days <= 0 or arcs < 1 or measurement_cadence_s <= 0 or decisions_per_period < 2:
         raise ValueError("Invalid rollout span, samples, or cadence")
@@ -268,13 +318,17 @@ def run_paired_study(cfg, output_dir, bundle, days=365, arcs=5, seed=24017,
             f"{teacher_cadence:g} s measurement cadence; deployment "
             f"{decisions_per_period} decisions/period, {measurement_cadence_s:g} s. "
             "Regenerate matching teacher data or match the rollout settings.")
+    if bundle["history_steps"] != int(cfg["narx"]["history_steps"]):
+        raise ValueError("Training/deployment history length mismatch")
+    controllers = ("uncontrolled", "stm", "narx") + (("neural_narx",) if neural_bundle is not None else ())
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     observer_at, observer_period, corrected = _observer_reference(cfg)
     gateway_at, gateway_meta = gateway_periodic_reference(cfg)
     duration_tu = days * 86400. / cfg["time_unit_s"]
-    decision_count = max(2, int(np.ceil(duration_tu / observer_period * decisions_per_period)))
-    grid = np.linspace(0., duration_tu, decision_count + 1)
+    # Preserve exact teacher decision cadence; append an evaluation-only endpoint.
+    step = observer_period / decisions_per_period
+    grid = np.r_[np.arange(0., duration_tu, step), duration_tu]
     measurement_times = np.unique(np.r_[np.arange(
         0., duration_tu, measurement_cadence_s / cfg["time_unit_s"]), grid])
     locations = sensor_configs(cfg)
@@ -283,10 +337,14 @@ def run_paired_study(cfg, output_dir, bundle, days=365, arcs=5, seed=24017,
         initial = _initial_conditions(
             cfg, np.asarray(corrected["orbit"]["state"]), gateway_at(0),
             seed + arc, len(measurement_times), len(locations))
-        for controller in ("uncontrolled", "stm", "narx"):
+        np.savez_compressed(output_dir / f"paired_initial_arc_{arc:03d}.npz",
+            truth=initial[0], estimate=initial[1], covariance=initial[2],
+            optical_noise=initial[3], camera_noise=initial[4])
+        for controller in controllers:
             episode = simulate_one_arc(
                 cfg, controller, observer_at, observer_period, gateway_at,
-                grid, measurement_times, initial, model=bundle,
+                grid, measurement_times, initial,
+                model=neural_bundle if controller == "neural_narx" else bundle,
                 max_departure_km=max_departure_km)
             arrays = {k: v for k, v in episode.items() if isinstance(v, np.ndarray)}
             np.savez_compressed(output_dir / f"{controller}_arc_{arc:03d}.npz", **arrays)
@@ -302,7 +360,7 @@ def run_paired_study(cfg, output_dir, bundle, days=365, arcs=5, seed=24017,
         writer.writeheader()
         writer.writerows(results)
     aggregate = {}
-    for policy in ("uncontrolled", "stm", "narx"):
+    for policy in controllers:
         selected = [r for r in results if r["controller"] == policy]
         aggregate[policy] = {
             "arcs": len(selected),

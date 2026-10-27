@@ -1,0 +1,53 @@
+{
+  "backend": "narxpy 0.1.0",
+  "selected_epoch": 110,
+  "epochs_trained": 600,
+  "training_decisions": 260,
+  "feasible_training_burns": 41,
+  "splits": {
+    "validation": {
+      "teacher_forced": {
+        "decisions": 65,
+        "feasible_burns": 8,
+        "precision": 0.6666666666666666,
+        "recall": 0.25,
+        "f1": 0.36363636363636365,
+        "all_command_rmse_m_s": 0.09435780265667978,
+        "feasible_burn_rmse_m_s": 0.2137374178499193,
+        "delay_accuracy": 0.625
+      },
+      "recursive": {
+        "decisions": 65,
+        "feasible_burns": 8,
+        "precision": 1.0,
+        "recall": 0.25,
+        "f1": 0.4,
+        "all_command_rmse_m_s": 0.1140450180250292,
+        "feasible_burn_rmse_m_s": 0.22664650956714533,
+        "delay_accuracy": 0.5
+      }
+    },
+    "test": {
+      "teacher_forced": {
+        "decisions": 65,
+        "feasible_burns": 9,
+        "precision": 0.25,
+        "recall": 0.1111111111111111,
+        "f1": 0.15384615384615383,
+        "all_command_rmse_m_s": 0.14726381506264083,
+        "feasible_burn_rmse_m_s": 0.2831674118692826,
+        "delay_accuracy": 0.6666666666666666
+      },
+      "recursive": {
+        "decisions": 65,
+        "feasible_burns": 9,
+        "precision": 1.0,
+        "recall": 0.1111111111111111,
+        "f1": 0.19999999999999998,
+        "all_command_rmse_m_s": 0.15575339083665152,
+        "feasible_burn_rmse_m_s": 0.3044447935415856,
+        "delay_accuracy": 0.5555555555555556
+      }
+    }
+  }
+}

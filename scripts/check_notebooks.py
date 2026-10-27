@@ -26,6 +26,7 @@ def execute_in_process(path):
         if cell.cell_type!='code':
             continue
         count+=1
+        print(f"Executing {path.name}, code cell {count}",flush=True)
         with capture_output() as captured:
             execution=shell.run_cell(cell.source,store_history=True)
         if execution.error_before_exec or execution.error_in_exec:
@@ -49,12 +50,12 @@ def execute_in_process(path):
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--in-process',action='store_true',help='Use isolated IPython processes when kernel sockets are unavailable')
-    parser.add_argument('--one',type=Path,help=argparse.SUPPRESS)
+    parser.add_argument('--one',type=Path,help="Execute just this notebook (default: Notebook 01 only)")
     args=parser.parse_args()
     if args.one:
         execute_in_process(args.one)
     else:
-        paths=sorted((root/'notebooks').glob('*.ipynb'))
+        paths=[root/'notebooks'/'01_narx_results.ipynb']
         for path in paths:
             if args.in_process:
                 subprocess.run([sys.executable,__file__,'--one',str(path)],cwd=root,check=True)

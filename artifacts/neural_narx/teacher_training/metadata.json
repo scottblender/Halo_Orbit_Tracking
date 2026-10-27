@@ -1,0 +1,72 @@
+{
+  "purpose": "Covariance-driven Monte Carlo applied-control trajectories for phase-aware NARX",
+  "initial_sampling": "Observer physical initial state and navigation error are sampled independently; Gateway truth remains on the nominal ephemeris, while Gateway navigation error is sampled from its filter prior.",
+  "assumptions": "Only the halo observer executes guidance maneuvers, with LSO-derived EKF navigation. Gateway truth follows a prescribed nominal CR3BP ephemeris, without station-keeping or physical scatter. Gateway reference is closure-validated and periodically repeated; no execution-error model.",
+  "interpretation": "Gateway tracking metrics compare EKF estimate against simulated Gateway truth; guidance uses reference departure.",
+  "configuration": {
+    "training_arcs": 20,
+    "validation_arcs": 5,
+    "test_arcs": 5,
+    "seed": 1022,
+    "arc_duration_periods": 2,
+    "decisions_per_period": 8,
+    "history_steps": 4,
+    "initial_position_spread_km": 0.03,
+    "initial_velocity_spread_m_s": 0.003,
+    "measurement_position_sigma_km": 0.01,
+    "measurement_velocity_sigma_m_s": 0.001,
+    "guidance_horizon_fraction": 0.25,
+    "candidate_delay_fractions": [
+      0,
+      0.0625,
+      0.125,
+      0.1875
+    ],
+    "regularization": 0.03,
+    "effort_penalty": 0.001,
+    "observer_guidance": {
+      "position_tolerance_km": 100,
+      "velocity_tolerance_m_s": 1,
+      "trigger_position_km": 50,
+      "trigger_velocity_m_s": 0.5,
+      "maximum_impulse_m_s": 10
+    },
+    "gateway_guidance": {
+      "position_tolerance_km": 0.1,
+      "velocity_tolerance_m_s": 0.01,
+      "trigger_position_km": 0.05,
+      "trigger_velocity_m_s": 0.005,
+      "maximum_impulse_m_s": 0.5
+    },
+    "closed_loop_measurement_cadence_s": 21600.0
+  },
+  "summary": {
+    "training": {
+      "arcs": 20,
+      "decision_epochs_per_arc": 17,
+      "gateway_position_within_100m_fraction": 0.3382352941176471,
+      "gateway_velocity_within_limit_fraction": 0.8,
+      "gateway_both_tracking_limits_fraction": 0.3382352941176471,
+      "observer_total_delta_v_m_s": 36.25633932016832,
+      "gateway_total_delta_v_m_s": 0.0
+    },
+    "validation": {
+      "arcs": 5,
+      "decision_epochs_per_arc": 17,
+      "gateway_position_within_100m_fraction": 0.4117647058823529,
+      "gateway_velocity_within_limit_fraction": 0.7764705882352941,
+      "gateway_both_tracking_limits_fraction": 0.4117647058823529,
+      "observer_total_delta_v_m_s": 8.927681011054664,
+      "gateway_total_delta_v_m_s": 0.0
+    },
+    "test": {
+      "arcs": 5,
+      "decision_epochs_per_arc": 17,
+      "gateway_position_within_100m_fraction": 0.4,
+      "gateway_velocity_within_limit_fraction": 0.8117647058823529,
+      "gateway_both_tracking_limits_fraction": 0.4,
+      "observer_total_delta_v_m_s": 7.211542351215317,
+      "gateway_total_delta_v_m_s": 0.0
+    }
+  }
+}
