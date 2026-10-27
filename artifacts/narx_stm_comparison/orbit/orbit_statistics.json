@@ -1,0 +1,29 @@
+{
+  "STM": {
+    "completed_365_days": true,
+    "completed_requested_span": true,
+    "last_simulated_day": 365.0,
+    "maximum_position_departure_km": 148.91296563672816,
+    "maximum_velocity_departure_m_s": 3.9217118154584036,
+    "corridor_fraction": 0.9285714285714286,
+    "total_delta_v_m_s": 39.80556080902093,
+    "stop_reason": null,
+    "rejected_burns": 0
+  },
+  "NARX": {
+    "completed_365_days": false,
+    "completed_requested_span": false,
+    "last_simulated_day": 42.30488231609435,
+    "maximum_position_departure_km": 22270.77108785058,
+    "maximum_velocity_departure_m_s": 489.8314361768924,
+    "corridor_fraction": 0.013736263736263736,
+    "total_delta_v_m_s": 4.836489691317456,
+    "stop_reason": "departure_cutoff",
+    "rejected_burns": 0
+  },
+  "diagnostics": {
+    "maximum_NARX_input_standard_deviations": 1407.6083920909064,
+    "first_day_above_10_standard_deviations": 11.079850130405662,
+    "note": "Large values indicate inputs far from training scaling; this is not a calibrated uncertainty or causal proof."
+  }
+}

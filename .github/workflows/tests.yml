@@ -27,6 +27,6 @@ jobs:
           name: executed-neural-narx-experiment
           path: |
             notebooks/01_narx_results.ipynb
-            artifacts/delta_v_prediction/
+            artifacts/narx_stm_comparison/
           if-no-files-found: error
           retention-days: 14

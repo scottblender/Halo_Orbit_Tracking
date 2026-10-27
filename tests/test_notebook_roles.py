@@ -39,16 +39,19 @@ def test_notebook_00_keeps_original_motivation_and_visualizations():
     assert "run_paired_study(" not in text
 
 
-def test_notebook_01_focuses_on_delta_v_prediction():
+def test_notebook_01_is_one_narx_against_stm_reference():
     results = nbformat.read(NB01, as_version=4)
     text = _source(results)
     for required in (
-        "fit_delta_v_predictor(",
-        "d_y=3",
-        "Nonzero-target vector RMSE",
-        "gateway_tracking_position_error_km",
-        "**not** optimize Gateway tracking error",
+        "fit_reference_narx(",
+        "run_reference_pair(",
+        "state transition matrix",
+        "at least 50 km",
+        "at least 0.5 m/s",
+        "Prediction residuals",
+        "Phase error [deg]",
+        "observer_truth_position_departure_km",
     ):
-        assert required in text, f"Notebook 01 missing prediction content: {required}"
-    assert "run_paired_study(" not in text
-    assert "run_gateway_comparison(" not in text
+        assert required in text, f"Notebook 01 missing requested explanation or plot: {required}"
+    for excluded in ("fit_delta_v_predictor(", "fit_observer_policy(", "Gradient-boosted", "Zero delta-v", "run_paired_study("):
+        assert excluded not in text

@@ -1,0 +1,42 @@
+{
+  "epochs_trained": 600,
+  "selected_epoch": 110,
+  "trained_networks": 1,
+  "training_decisions": 260,
+  "training_burns": 41,
+  "test_decisions": 65,
+  "reference_burns": 9,
+  "predicted_burns": 1,
+  "missed_burns": 8,
+  "extra_burns": 0,
+  "rejected_predictions": 0,
+  "vector_rmse_m_s": 0.19776636622126198,
+  "burn_vector_rmse_m_s": 0.531481139473406,
+  "correct_history_burn_vector_rmse_m_s": 0.532514256827476,
+  "component_bias_m_s": [
+    -0.0009283070885332459,
+    -0.007662814490117604,
+    -0.010129681014965522
+  ],
+  "phase_mean_absolute_error_deg": 15.000000000000016,
+  "phase_exact_candidate_accuracy": 0.5555555555555556,
+  "phase_evaluation": "Timing estimates at all reference burn decisions; a timing estimate alone does not mean a burn was requested.",
+  "phase_candidates_relative_deg": [
+    0.0,
+    22.5,
+    45.0,
+    67.5
+  ],
+  "training_timing_counts": [
+    31,
+    0,
+    0,
+    10
+  ],
+  "test_timing_counts": [
+    6,
+    2,
+    0,
+    1
+  ]
+}

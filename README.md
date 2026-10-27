@@ -1,29 +1,36 @@
-# Predicting halo-observer delta-v with neural NARX
+# Halo burns: one NARX prediction and one STM reference
 
-The goal is to predict the halo observer's **delta-v vector needed to support
-Gateway tracking**, and use the data to diagnose prediction failures.
+[Notebook 01](notebooks/01_narx_results.ipynb) asks two questions:
 
-Start with [Notebook 01](notebooks/01_narx_results.ipynb). It now contains only:
+- Does one `narxpy` network predict the reference delta-v and burn phase?
+- What happens to the halo orbit when those predicted burns are applied?
 
-1. The available delta-v targets and a check of their meaning.
-2. A genuine `narxpy` network with four input and four past delta-v delays,
-   predicting three delta-v components in rotating-frame m/s.
-3. Held-out prediction errors, compared with the existing gradient-boosted
-   baseline, zero delta-v and previous delta-v.
-4. Three diagnostic figures: predicted versus target delta-v, individual burn
-   errors, and the relationship between the labels and Gateway tracking error.
+It contains three plots: **NARX versus STM burns**, **prediction residuals**
+(NARX minus STM), and **orbit departure after applying each burn sequence**.
+A short statistics table counts missed burns and measures delta-v and timing
+errors. A phase-count table shows which burn timings the training data cover.
+No other prediction models are compared in this notebook. Gateway tracking is
+left for later post-processing.
 
-**The critical data limitation:** the existing STM labels correct departure from
-the halo reference; they do not directly optimize Gateway tracking error. The
-notebook makes this mismatch explicit. Predicting these labels cannot establish
-that the predicted burns maintain Gateway tracking limits.
+## What STM and the burn procedure mean
 
-The focused model was actually trained for 600 epochs. On 65 held-out decisions,
-recursive vector RMSE was 0.230 m/s versus 0.198 m/s for zero delta-v. On the nine
-nonzero targets, RMSE was 0.514 versus 0.531 m/s, respectively. There are only
-41 usable nonzero training examples, and recursive feedback increases burn error
-relative to one-step prediction. These are measured limitations of this experiment,
-not a claim that NARX universally fails.
+STM means **state transition matrix**. It estimates how a small change now
+changes the future orbit. The STM reference calculation uses that information
+to calculate a correction; it is not a neural network or a perfect answer.
+
+The existing procedure checks the estimated halo departure eight times per
+orbit. At **50 km position departure or 0.5 m/s velocity departure**, it tries
+burning now or 22.5, 45, or 67.5 degrees later in the time-based orbit cycle.
+It calculates a delta-v for each option, propagates the nonlinear orbit to
+check it, rejects impulses above 10 m/s or corrections that do not improve
+departure, and chooses the best remaining correction with a small fuel penalty.
+No additional burn is scheduled while one is pending. This choose-and-apply
+procedure is what the code calls a controller.
+
+The single NARX learns the burn/no-burn choice, three delta-v components, and
+waiting-time scores together. It has four input-history steps, four past-output
+steps, and 64 hidden units. During its orbit test it uses its own predictions,
+with no STM replacement burns.
 
 ## Reproduce
 
@@ -33,18 +40,19 @@ python -m pytest -q
 python scripts/check_notebooks.py --one notebooks/01_narx_results.ipynb
 ```
 
-The notebook reuses the saved independent training/validation/test teacher data,
-or regenerates them if missing. It fits scalers and weights on training only,
-selects an epoch using validation, and then evaluates test trajectories.
-Prediction metrics, weights, held-out vectors and PNG figures are saved in
-[artifacts/delta_v_prediction](artifacts/delta_v_prediction/).
+The notebook reuses independent 20/5/5 training/validation/test reference
+trajectories, or regenerates them if missing. It trains one network for 600
+epochs and selects the epoch using validation. Test trajectories are used only
+for evaluation. It then runs one matched STM/NARX nonlinear simulation pair
+with a planned 365-day span. Initial states and sensor noise are identical.
+This is one paired orbit test, not a population success-rate estimate.
+
+Results, weights, figures and underlying arrays are saved in
+[artifacts/narx_stm_comparison](artifacts/narx_stm_comparison/). Curves stop on
+termination; missing future states are not filled in. Completing the year does
+not imply remaining inside the 100 km / 1 m/s comparison corridor.
 
 [Notebook 00](notebooks/00_gateway_tracking_comparison.ipynb) and its original
-visualizations remain unchanged. The gradient-boosted implementation remains
-unchanged in `two_stage_narx.py`.
-
-The earlier annual controller experiment remains archived under
-[artifacts/neural_narx](artifacts/neural_narx/), with its original verification
-record applying to commit `c6bb606`. It is not rerun by Notebook 01 and is not
-used as proof of delta-v prediction accuracy. Its optional command-line entry
-point remains `scripts/run_one_year_study.py`.
+visualizations remain unchanged. Earlier baselines, pure delta-v experiments,
+and annual comparisons remain available in their existing source modules and
+artifact folders; Notebook 01 does not train or compare those additional models.

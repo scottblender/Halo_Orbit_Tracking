@@ -1,4 +1,4 @@
-name: Halo delta-v prediction experiment
+name: NARX versus STM burns
 on:
   workflow_dispatch:
 jobs:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: halo-delta-v-prediction
+          name: narx-stm-burn-comparison
           path: |
-            artifacts/delta_v_prediction/
+            artifacts/narx_stm_comparison/
             notebooks/01_narx_results.ipynb

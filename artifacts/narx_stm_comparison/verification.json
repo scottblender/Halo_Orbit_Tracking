@@ -1,0 +1,15 @@
+{
+  "tests_passed": 49,
+  "trained_networks": 1,
+  "epochs_trained": 600,
+  "executed_notebook_code_cells": 5,
+  "embedded_plots": 3,
+  "notebook00_checkout_sha256": "12a844876db323dfc56ea81abd44366589c8ec5a4e52b8193f0b1e951e0235b5",
+  "planned_orbit_span_days": 365,
+  "paired_orbit_trials": 1,
+  "comparison": [
+    "STM",
+    "NARX"
+  ],
+  "note": "NARX terminates early; execution does not imply successful station keeping."
+}
