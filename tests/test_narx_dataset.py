@@ -20,7 +20,7 @@ def test_phase_aware_split_and_schema(tmp_path):
             assert d["gateway_target_delta_v_rotating_m_s"].shape[-1] == 3
             assert np.all(~d["history_valid"][:1])
             assert np.all(d["history_valid"][1:])
-            for name in ("observer", "gateway"):
+            for name in ("observer",):
                 valid = d[name + "_maneuver_valid"]
                 required = d[name + "_maneuver_required"]
                 burn = d[name + "_target_delta_v_rotating_m_s"]
@@ -29,6 +29,9 @@ def test_phase_aware_split_and_schema(tmp_path):
                 assert np.all(
                     d[name + "_weighted_cost_after"][required & valid]
                     < d[name + "_weighted_cost_before"][required & valid])
+            assert not d["gateway_maneuver_required"].any()
+            assert not d["gateway_maneuver_valid"].any()
+            assert np.isnan(d["gateway_target_delta_v_rotating_m_s"]).all()
             starts.extend(d["observer_truth_normalized_evaluation_only"][:, 0])
     assert len(np.unique(starts, axis=0)) == 4
     meta = json.loads((tmp_path / "metadata.json").read_text())
