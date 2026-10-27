@@ -161,7 +161,8 @@ def generate_phase_aware_dataset(cfg, directory):
         for _ in range(n):
             record = {}
             for name, reference in references.items():
-                initial = nominal_states[name] + rng.normal(size=6) * spread * converter
+                initial = (nominal_states[name] + rng.normal(size=6) * spread * converter
+                           if name == "observer" else nominal_states[name].copy())
                 truth = propagate(initial, times, cfg["mu"])
                 # Explicitly a noisy navigation proxy, not a sequential EKF.
                 navigation = truth + rng.normal(size=truth.shape) * noise * converter
