@@ -1,4 +1,4 @@
-name: One-year station-keeping pilot and plotted notebooks
+name: One-year NARX rollout and results notebook
 
 on:
   workflow_dispatch:
@@ -34,19 +34,19 @@ jobs:
             --measurement-cadence-s 86400 \
             --decisions-per-period 4 \
             --output results/one_year
-      - name: Execute cleaned notebooks and embed annual plots
+      - name: Execute only Notebook 01 and embed 365-day results
         env:
           HALO_YEAR_REUSE: '1'
           HALO_YEAR_ARCS: '1'
           HALO_YEAR_CADENCE_S: '86400'
           HALO_YEAR_DECISIONS: '4'
-        run: python scripts/check_notebooks.py --in-process
-      - name: Commit executed notebook plots to pull request branch
+        run: python scripts/check_notebooks.py --one notebooks/01_narx_results.ipynb
+      - name: Commit executed Notebook 01 plots to pull request branch
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add notebooks/00_one_year_problem_setup.ipynb notebooks/01_narx_results.ipynb
+          git add notebooks/01_narx_results.ipynb
           if ! git diff --cached --quiet; then
             git commit -m "Embed 365-day simulation plots in notebooks [skip ci]"
             git push origin "HEAD:${{ github.head_ref }}"
@@ -58,6 +58,6 @@ jobs:
           name: one-year-stationkeeping-pilot
           path: |
             results/one_year/
-            notebooks/00_one_year_problem_setup.ipynb
+            notebooks/00_gateway_tracking_comparison.ipynb
             notebooks/01_narx_results.ipynb
           if-no-files-found: warn
