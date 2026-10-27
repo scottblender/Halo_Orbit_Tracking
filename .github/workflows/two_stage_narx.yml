@@ -1,0 +1,25 @@
+name: Two-stage NARX benchmark
+on:
+  push:
+    branches: [feature/two-stage-narx-baseline]
+  workflow_dispatch:
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e ".[dev]"
+      - name: Generate Monte Carlo data and evaluate held-out episodes
+        run: python scripts/run_two_stage_narx.py
+      - name: Upload evaluation metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-stage-narx-metrics
+          path: results/narx_two_stage/metrics.json
+          if-no-files-found: warn
+          retention-days: 14
