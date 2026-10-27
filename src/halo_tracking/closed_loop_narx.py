@@ -1,4 +1,4 @@
-"""Closed-loop dual-spacecraft guidance episodes with angle-only EKF tracking.
+"""Closed-loop observer-only guidance episodes with LSO-driven EKF tracking.
 
 Each decision uses estimated states, not truth. Scheduled burns modify truth
 and the estimator prediction, and their executed values are exported as past
@@ -90,6 +90,8 @@ def generate_closed_loop_dataset(cfg, directory):
     }
     reference = {name: _reference(state, horizon + T, cfg)
                  for name, state in initial_ref.items()}
+    # Gateway is a prescribed target ephemeris; it is never commanded to burn.
+    # Its supplied state is NOT yet verified as a periodic 9:2 NRHO.
     scales = np.r_[np.full(3, 1 / cfg["length_unit_km"]),
                    np.full(3, cfg["time_unit_s"] / (1000 * cfg["length_unit_km"]))]
     # Covariance describes the initial physical state dispersion and the
@@ -123,10 +125,13 @@ def generate_closed_loop_dataset(cfg, directory):
                 np.zeros(12), initial_covariance_joint)
             navigation_offset = rng.multivariate_normal(
                 np.zeros(12), initial_covariance_joint)
+            # Hold the Gateway truth on the prescribed nominal ephemeris.
+            # Its navigation estimate still starts with independent uncertainty.
+            physical_offset[6:] = 0.0
             truth = nominal + physical_offset
             x = truth + navigation_offset
             P = initial_covariance_joint.copy()
-            scheduled = {"observer": None, "gateway": None}
+            scheduled = {"observer": None}
             executed = {"observer": np.zeros(3), "gateway": np.zeros(3)}
             executed_epoch = {"observer": np.nan, "gateway": np.nan}
             results = {name: {key: [] for key in (
@@ -158,7 +163,7 @@ def generate_closed_loop_dataset(cfg, directory):
                 Q[:6, :6], Q[6:, 6:] = Qo, Qg
                 P = F @ P @ F.T + Q
                 truth = np.r_[propagate_step(truth[:6], previous, t, cfg["mu"])[0],
-                              propagate_step(truth[6:], previous, t, cfg["mu"])[0]]
+                              reference["gateway"](t)]
                 x = xt
                 previous = t
             def execute(name):
@@ -196,7 +201,10 @@ def generate_closed_loop_dataset(cfg, directory):
                         physical = _error(t, x[sl], reference[name](t), cfg)
                         tracking = _error(t, x[sl], truth[sl], cfg)
                         policy = {**settings, **s[name + "_guidance"]}
-                        if scheduled[name] is None:
+                        if name == "gateway":
+                            # Retained diagnostic fields, never a Gateway control target.
+                            label = dict(required=False, valid=False, burn=np.full(3, np.nan), delay_tu=np.nan)
+                        elif scheduled[name] is None:
                             label = _optimal_phase(t, x[sl], reference[name], cfg, policy)
                         else:
                             label = dict(required=False, valid=False, burn=np.full(3, np.nan), delay_tu=np.nan)
@@ -221,7 +229,7 @@ def generate_closed_loop_dataset(cfg, directory):
                             ("scheduled_pending", scheduled[name] is not None),
                         ):
                             results[name][key].append(value)
-                        if label["required"] and label["valid"]:
+                        if name == "observer" and label["required"] and label["valid"]:
                             scheduled[name] = (t + label["delay_tu"], label["burn"].copy())
                             if label["delay_tu"] == 0:
                                 execute(name)
@@ -274,8 +282,8 @@ def generate_closed_loop_dataset(cfg, directory):
                           "gateway_total_delta_v_m_s": float(np.sum(np.linalg.norm(arrays["gateway_applied_delta_v_rotating_m_s"], axis=-1)))}
     (out / "metadata.json").write_text(json.dumps(dict(
         purpose="Covariance-driven Monte Carlo applied-control trajectories for phase-aware NARX",
-        initial_sampling="Each physical initial state is independently drawn about the corrected observer / Gateway nominal reference using their configured filter prior covariances. Independent draws determine initial navigation error. The rounded catalog trajectory belongs to the separate uncontrolled baseline, not these training arcs.",
-        assumptions="Scheduled guidance candidates are applied to both truth and estimator; no execution error model.",
+        initial_sampling="Observer physical initial state and navigation error are sampled independently; Gateway truth remains on the nominal ephemeris, while Gateway navigation error is sampled from its filter prior.",
+        assumptions="Only the halo observer executes guidance maneuvers, with LSO-derived EKF navigation. Gateway truth follows a prescribed nominal CR3BP ephemeris, without station-keeping or physical scatter. Supplied Gateway initial conditions are not validated as a periodic 9:2 NRHO; no execution-error model.",
         interpretation="Gateway tracking metrics compare EKF estimate against simulated Gateway truth; guidance uses reference departure.",
         configuration=s, summary=summary), indent=2) + "\n")
     return summary
