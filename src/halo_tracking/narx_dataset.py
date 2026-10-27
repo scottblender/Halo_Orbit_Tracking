@@ -1,8 +1,7 @@
-"""Phase-aware, two-spacecraft inverse-guidance datasets for NARX experiments.
+"""Phase-aware observer-only inverse-guidance datasets for NARX experiments.
 
 All distances are km internally, all physical velocity errors and impulses m/s.
-The two control channels are independent: this does NOT assume an observer burn
-can correct Gateway's own orbit. Navigation here is a seeded noisy-state proxy,
+Only the halo observer has a guidance channel; Gateway is a passive target. Navigation here is a seeded noisy-state proxy,
 not an EKF; replace it with the tracking estimator before flight-like studies.
 """
 import json
@@ -113,7 +112,7 @@ def generate_phase_aware_dataset(cfg, directory):
     """
     cfg = deepcopy(cfg)
     s = cfg["narx"]
-    for name in ("observer", "gateway"):
+    for name in ("observer",):
         policy = s[name + "_guidance"]
         for key in ("position_tolerance_km", "velocity_tolerance_m_s",
                     "trigger_position_km", "trigger_velocity_m_s", "maximum_impulse_m_s"):
@@ -169,8 +168,11 @@ def generate_phase_aware_dataset(cfg, directory):
                 relative = np.asarray([_error(t, x, reference(t), cfg)
                                        for t, x in zip(times, navigation)])
                 policy = {**s, **s[name + "_guidance"]}
-                labels = [_optimal_phase(t, x, reference, cfg, policy)
-                          for t, x in zip(times, navigation)]
+                labels = ([_optimal_phase(t, x, reference, cfg, policy)
+                           for t, x in zip(times, navigation)] if name == "observer" else
+                          [dict(required=False, valid=False, burn=np.full(3, np.nan),
+                                delay_tu=np.nan, before=np.nan, after=np.nan,
+                                improvement=np.nan) for _ in times])
                 prefix = name + "_"
                 record[prefix + "truth_normalized_evaluation_only"] = truth
                 record[prefix + "navigation_normalized"] = navigation
@@ -198,8 +200,8 @@ def generate_phase_aware_dataset(cfg, directory):
         np.savez_compressed(directory / (split + ".npz"), **arrays)
         summary[split] = dict(arcs=n, decisions=n * len(times),
                               observer_valid=int(arrays["observer_maneuver_valid"].sum()),
-                              gateway_valid=int(arrays["gateway_maneuver_valid"].sum()))
-    metadata = dict(purpose="Phase-selected inverse guidance labels for two independent controlled spacecraft",
+                              gateway_valid=0)
+    metadata = dict(purpose="Phase-selected inverse guidance labels for the halo observer only",
                     units="position km; physical velocity and delta-v m/s; phase radians; normalized states CR3BP",
                     settings=s, summary=summary,
                     caveats=["Observer station-keeping is separate from Gateway orbit tracking accuracy.",
