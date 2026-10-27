@@ -25,7 +25,7 @@ from .visibility import optical_visible
 from .surface_sensor import site_rotating
 
 
-def _sample_observations(t, observer, gateway, cfg, rng, sites):
+def _sample_observations(t, observer, gateway, cfg, rng, sites, paired_noise=None):
     """Sample accepted LSO and observer-to-Gateway angle pairs."""
     lso = np.full((len(sites), 2), np.nan)
     visible = np.zeros(len(sites), dtype=bool)
@@ -36,14 +36,18 @@ def _sample_observations(t, observer, gateway, cfg, rng, sites):
                     np.deg2rad(local["site"]["minimum_elevation_deg"])
                     and optical_visible(station, observer[:3], t, local, link="lso"))
         if accepted:
-            lso[j] = predict(t, observer, local) + rng.normal(0, sigma_l, 2)
+            noise = (rng.normal(0, sigma_l, 2) if paired_noise is None
+                     else np.asarray(paired_noise[0][j]) * sigma_l)
+            lso[j] = predict(t, observer, local) + noise
             lso[j, 0] = wrap(lso[j, 0])
             visible[j] = True
     camera = np.full(2, np.nan)
     target_visible = gateway_visible(observer, gateway, cfg, t)
     if target_visible:
         sigma_g = cfg["comparison"]["gateway_camera_sigma_arcsec"] * ARCSEC
-        camera = spacecraft_measurement(t, observer, gateway, cfg) + rng.normal(0, sigma_g, 2)
+        noise = (rng.normal(0, sigma_g, 2) if paired_noise is None
+                 else np.asarray(paired_noise[1]) * sigma_g)
+        camera = spacecraft_measurement(t, observer, gateway, cfg) + noise
         camera[0] = wrap(camera[0])
     return lso, visible, camera, bool(target_visible)
 
