@@ -77,7 +77,11 @@ def evaluate_two_stage(dataset_dir, output_dir, cfg):
                                  setting["seed"])
         active = train & need["training"] & valid["training"] & (timing["training"] >= 0)
         if not active.any():
-            raise ValueError(f"No feasible {name} burn labels in training split")
+            report[name] = {"status": "insufficient_feasible_training_burns",
+                            "training_decisions": int(train.sum()),
+                            "training_triggered": int((train & need["training"]).sum()),
+                            "training_feasible_triggered": 0}
+            continue
         regressors = []
         if active.sum() < 5:
             # A constant baseline remains meaningful for very small test fixtures.
@@ -92,7 +96,10 @@ def evaluate_two_stage(dataset_dir, output_dir, cfg):
                                                      burn["training"][active, j]))
         phase_model = _classifier(X["training"][active], timing["training"][active],
                                   setting["seed"])
-        report[name] = {}
+        report[name] = {"status": "evaluated",
+                        "training_decisions": int(train.sum()),
+                        "training_triggered": int((train & need["training"]).sum()),
+                        "training_feasible_triggered": int(active.sum())}
         for split in ("validation", "test"):
             rows = mask[split]
             y = need[split][rows]
