@@ -226,7 +226,7 @@ def generate_closed_loop_dataset(cfg, directory):
                             ("maneuver_valid", label["valid"]),
                             ("applied_delta_v_rotating_m_s", executed[name].copy()),
                             ("applied_burn_time_tu", executed_epoch[name]),
-                            ("scheduled_pending", scheduled[name] is not None),
+                            ("scheduled_pending", scheduled.get(name) is not None),
                         ):
                             results[name][key].append(value)
                         if name == "observer" and label["required"] and label["valid"]:
