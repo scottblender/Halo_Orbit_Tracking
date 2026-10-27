@@ -26,6 +26,11 @@ def test_closed_loop_burn_history_and_tracking(tmp_path):
                 data["observer_history_applied_delta_v_rotating_m_s"][0, 1, 0],
                 data["observer_applied_delta_v_rotating_m_s"][0, 0])
             assert np.isfinite(data["gateway_tracking_position_error_km"]).all()
+            assert not data["gateway_maneuver_required"].any()
+            assert not data["gateway_maneuver_valid"].any()
+            assert np.isnan(data["gateway_target_delta_v_rotating_m_s"]).all()
+            np.testing.assert_array_equal(data["gateway_applied_delta_v_rotating_m_s"], 0)
+            np.testing.assert_allclose(data["gateway_truth_normalized_evaluation_only"][0, 0], cfg["gateway"]["state"])
 
 
 def test_closed_loop_is_reproducible(tmp_path):
@@ -60,6 +65,7 @@ def test_mc_initial_conditions_match_covariance_and_reference(tmp_path):
         np.testing.assert_allclose(data["initial_truth_normalized"], expected + physical)
         np.testing.assert_allclose(data["initial_navigation_normalized"],
                                    expected + physical + navigation_error)
-        assert np.any(np.abs(physical) > 0)
+        assert np.any(np.abs(physical[:, :6]) > 0)
+        np.testing.assert_array_equal(physical[:, 6:], 0)
         assert np.any(np.abs(navigation_error) > 0)
         assert not np.array_equal(physical, navigation_error)
