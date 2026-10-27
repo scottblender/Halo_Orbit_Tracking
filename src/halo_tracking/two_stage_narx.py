@@ -59,7 +59,7 @@ def evaluate_two_stage(dataset_dir, output_dir, cfg):
     setting = cfg["narx"]
     period = float(splits["training"]["decision_times_tu"][-1]) / setting["arc_duration_periods"]
     report = {}
-    for name in ("observer", "gateway"):
+    for name in ("observer",):
         X, mask, need, valid, burn, timing = {}, {}, {}, {}, {}, {}
         for split, d in splits.items():
             X[split], mask[split] = _features(d, name)

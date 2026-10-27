@@ -35,7 +35,8 @@ def test_two_stage_with_independent_episodes(tmp_path):
         np.savez_compressed(source / (split + ".npz"), **arrays)
     report = evaluate_two_stage(source, tmp_path / "metrics", cfg)
     assert (tmp_path / "metrics" / "metrics.json").exists()
-    for name in ("observer", "gateway"):
+    assert set(report) == {"observer"}
+    for name in ("observer",):
         assert report[name]["test"]["evaluated_decisions"] == 45
         assert report[name]["test"]["feasible_burn_examples"] > 0
         assert report[name]["test"]["delta_v_rmse_m_s"] >= 0
