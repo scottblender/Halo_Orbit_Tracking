@@ -128,3 +128,64 @@ def evaluate_two_stage(dataset_dir, output_dir, cfg):
             }
     (output_dir / "metrics.json").write_text(json.dumps(report, indent=2) + "\n")
     return report
+
+
+def fit_observer_policy(dataset_dir, cfg, output_path):
+    """Fit deployable teacher-imitation models on TRAINING arcs only.
+
+    The returned bundle is evaluated with causal inputs during rollouts.
+    Validation/test splits are never used for fitting.
+    """
+    import joblib
+    from sklearn.dummy import DummyRegressor
+    s = cfg["narx"]
+    training = _load(Path(dataset_dir) / "training.npz")
+    X, warmup = _features(training, "observer")
+    good = warmup & np.isfinite(X).all(axis=1)
+    y = training["observer_maneuver_required"].ravel().astype(bool)
+    valid = training["observer_maneuver_valid"].ravel().astype(bool)
+    dv = training["observer_target_delta_v_rotating_m_s"].reshape(-1, 3)
+    period = float(training["decision_times_tu"][-1]) / s["arc_duration_periods"]
+    delays = _timing_classes(training["observer_target_burn_delay_tu"].ravel(),
+                              s["candidate_delay_fractions"], period)
+    positive = good & y & valid & (delays >= 0) & np.isfinite(dv).all(axis=1)
+    if not good.any() or not positive.any():
+        raise ValueError("Insufficient observer training histories or feasible burns")
+    cls = _classifier(X[good], y[good], s["seed"])
+    models = []
+    for j in range(3):
+        if positive.sum() < 5:
+            reg = DummyRegressor().fit(X[positive], dv[positive, j])
+        else:
+            reg = HistGradientBoostingRegressor(
+                max_iter=100, max_leaf_nodes=15, min_samples_leaf=5,
+                random_state=s["seed"]).fit(X[positive], dv[positive, j])
+        models.append(reg)
+    timing = _classifier(X[positive], delays[positive], s["seed"])
+    bundle = dict(classifier=cls, regressors=models, timing=timing,
+                  history_steps=int(s["history_steps"]),
+                  candidate_delay_fractions=list(s["candidate_delay_fractions"]),
+                  fitted_training_decisions=int(good.sum()),
+                  fitted_feasible_burns=int(positive.sum()),
+                  feature_size=int(X.shape[1]), training_only=True)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(bundle, output_path)
+    return bundle
+
+
+def predict_observer_policy(bundle, features, period_tu, max_impulse_m_s):
+    """Return burn decision, physical rotating-frame impulse and nonnegative delay."""
+    x = np.asarray(features, dtype=float).reshape(1, -1)
+    if x.shape[1] != bundle["feature_size"] or not np.isfinite(x).all():
+        raise ValueError("Invalid causal observer features")
+    if not bool(bundle["classifier"].predict(x)[0]):
+        return dict(required=False, valid=True, burn=np.zeros(3), delay_tu=0.)
+    dv = np.array([r.predict(x)[0] for r in bundle["regressors"]])
+    index = int(bundle["timing"].predict(x)[0])
+    candidates = bundle["candidate_delay_fractions"]
+    valid = (0 <= index < len(candidates) and np.isfinite(dv).all()
+             and np.linalg.norm(dv) <= max_impulse_m_s)
+    return dict(required=True, valid=bool(valid),
+                burn=dv if valid else np.full(3, np.nan),
+                delay_tu=float(candidates[index] * period_tu) if valid else np.nan)
