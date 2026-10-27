@@ -189,7 +189,8 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
                         applied[k] += executed
                         executed[:] = 0.
             k += 1
-        except (ValueError, OverflowError, FloatingPointError, RuntimeError) as exc:
+        except (ValueError, OverflowError, FloatingPointError, RuntimeError,
+                np.linalg.LinAlgError, ZeroDivisionError) as exc:
             halted = f"{type(exc).__name__}: {exc}"
             break
     records["decision_times_tu"] = times
