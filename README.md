@@ -1,5 +1,52 @@
 # Halo observer and Lunar Gateway tracking
 
+## Current research experiment: 365-day observer-only NARX station-keeping
+
+**Use [notebooks/01_narx_results.ipynb](notebooks/01_narx_results.ipynb) and
+[scripts/run_one_year_study.py](scripts/run_one_year_study.py) for the current
+observer station-keeping experiment. Older descriptions further below document
+historical prototypes; those should not be mistaken for the active architecture.**
+
+The six model assumptions and acceptance checks are:
+
+1. **Observer reference:** numerically differentially corrected periodic Earth–Moon CR3BP halo, with closure checked by `correct_halo_reference`.
+2. **Gateway truth:** supplied nominal 9:2 NRHO state validated for one-period closure (position and velocity), evaluated as a prescribed, repeated periodic CR3BP ephemeris. It has **zero commanded maneuvers**. This verifies closure of the supplied seed within the model, *not* flight ephemeris fidelity or independent 9:2-family classification.
+3. **Measurements:** three lunar surface optical sites, plus observer-to-Gateway angles where available, drive a coupled EKF. The controller uses estimated observer deviations, previous **executed** burns, orbital phase, visibility and estimated covariance, never truth.
+4. **STM policy:** at each candidate decision, an STM-based least-squares correction is checked by nonlinear propagation and scheduled/applied to the observer.
+5. **Learned policy:** a supervised *NARX-inspired* (lagged-feature gradient-boosting) classifier, three-component Δv regressor and discrete burn-delay predictor are fitted **only** on short training trajectories. During the 365-day rollout, their actual predictions are executed with **no STM fallback**.
+6. **Paired comparison:** uncontrolled, STM and NARX policies receive identical observer initial perturbations, EKF initial-estimation errors, and per-epoch pre-sampled LSO/camera noise. Geometry and accepted observations can differ as policies diverge.
+
+The annual run reports per-trajectory/full-sample corridor survival, incomplete
+runs (counted as failures), observer departure and total executed Δv,
+Gateway tracking RMSE and joint 100-m/0.01-m/s compliance. Results are **not**
+claimed until the 365-day generator has actually completed.
+
+Run from a checkout with development dependencies installed:
+
+```bash
+python -m pip install -e ".[dev]"
+python scripts/run_one_year_study.py --days 365 --arcs 5
+```
+
+Output: `results/one_year/summary.json`, `arc_metrics.csv`, three
+`{uncontrolled,stm,narx}_arc_XXX.npz` files per realization, and the frozen
+`observer_narx.joblib` bundle. Notebook 01 loads these artifacts and produces
+comparative trajectory, Δv, Gateway estimation, and survival summaries.
+
+For a quick implementation smoke test only:
+
+```bash
+python scripts/run_one_year_study.py --days 0.5 --arcs 1 --training-arcs 5 --output results/one_year_smoke
+```
+
+The full-year results are sensitive to the short-arc teacher-training population
+and the idealized CR3BP / optical sensor model. They must not be interpreted
+as high-fidelity operational mission performance. Increase trajectory diversity
+and held-out arc count before quantitative reliability claims.
+
+---
+
+
 Open [the main notebook](notebooks/00_gateway_tracking_comparison.ipynb). It compares Gateway tracking over **one observer period (about 8.06 days)** using exact observer knowledge versus an observer orbit estimated from a lunar surface observer (LSO).
 
 Both cases use the same truth trajectories, Gateway prior and noisy Gateway measurements. The notebook includes 3D geometry, position/velocity/acceleration histories for both spacecraft, estimation errors, predicted uncertainty, and a prediction-endurance table with **instantaneous position error and rolling 24-hour position RMSE**.

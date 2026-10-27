@@ -1,0 +1,40 @@
+name: One-year station-keeping pilot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/halo_tracking/year_study.py'
+      - 'src/halo_tracking/gateway_reference_periodic.py'
+      - 'scripts/run_one_year_study.py'
+      - '.github/workflows/one-year-pilot.yml'
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install numerical and learning dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Run real paired 365-day pilot
+        run: |
+          python scripts/run_one_year_study.py \
+            --days 365 \
+            --arcs 1 \
+            --training-arcs 20 \
+            --measurement-cadence-s 86400 \
+            --decisions-per-period 4 \
+            --output results/one_year
+      - name: Upload 365-day results and trained model
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: one-year-stationkeeping-pilot
+          path: results/one_year/
+          if-no-files-found: warn
