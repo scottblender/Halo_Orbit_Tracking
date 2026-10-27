@@ -46,7 +46,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add notebooks/00_one_year_problem_setup.ipynb notebooks/01_narx_results.ipynb
+          git add notebooks/00_gateway_tracking_comparison.ipynb notebooks/01_narx_results.ipynb
           if ! git diff --cached --quiet; then
             git commit -m "Embed 365-day simulation plots in notebooks [skip ci]"
             git push origin "HEAD:${{ github.head_ref }}"
@@ -58,6 +58,6 @@ jobs:
           name: one-year-stationkeeping-pilot
           path: |
             results/one_year/
-            notebooks/00_one_year_problem_setup.ipynb
+            notebooks/00_gateway_tracking_comparison.ipynb
             notebooks/01_narx_results.ipynb
           if-no-files-found: warn
