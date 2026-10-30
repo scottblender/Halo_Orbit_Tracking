@@ -1,0 +1,314 @@
+{
+  "model": "sparse quadratic polynomial NARX",
+  "history_steps": 4,
+  "timing": "Supplied STM schedule; timing and burn/no-burn are NOT predicted",
+  "selected_max_terms_per_component": 4,
+  "candidate_terms": 1080,
+  "variable_candidate_terms": 1080,
+  "validation_candidates": [
+    {
+      "terms_per_component": 1,
+      "validation": {
+        "scored_burns": 8,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.5359125361662569,
+        "component_rmse_m_s": [
+          0.28980644545074186,
+          0.36027994270469765,
+          0.27094802726732575
+        ],
+        "component_bias_m_s": [
+          -0.014204854242436851,
+          0.04808949411579494,
+          -0.05008691231691513
+        ],
+        "maximum_vector_error_m_s": 0.9471958978521856
+      },
+      "failures": [],
+      "warnings": []
+    },
+    {
+      "terms_per_component": 2,
+      "validation": {
+        "scored_burns": 8,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.38598748164195695,
+        "component_rmse_m_s": [
+          0.1614030423795117,
+          0.26408160532768765,
+          0.2306432301683468
+        ],
+        "component_bias_m_s": [
+          -0.02809593202049941,
+          -0.04608680970048014,
+          0.11817286103165692
+        ],
+        "maximum_vector_error_m_s": 0.6767175035233526
+      },
+      "failures": [],
+      "warnings": []
+    },
+    {
+      "terms_per_component": 4,
+      "validation": {
+        "scored_burns": 8,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.25126779720857406,
+        "component_rmse_m_s": [
+          0.10927663091549038,
+          0.16148367792169893,
+          0.1584838970201383
+        ],
+        "component_bias_m_s": [
+          -0.04168738966710383,
+          -0.018121430681822634,
+          0.036798656362883715
+        ],
+        "maximum_vector_error_m_s": 0.4377925331381413
+      },
+      "failures": [],
+      "warnings": []
+    },
+    {
+      "terms_per_component": 8,
+      "validation": {
+        "scored_burns": 8,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.3105649731981927,
+        "component_rmse_m_s": [
+          0.11226591807666439,
+          0.20473578775484733,
+          0.2047687071512636
+        ],
+        "component_bias_m_s": [
+          -0.03671236170820314,
+          0.026003239817120695,
+          0.08521581353042809
+        ],
+        "maximum_vector_error_m_s": 0.4537016221878686
+      },
+      "failures": [],
+      "warnings": []
+    },
+    {
+      "terms_per_component": 12,
+      "validation": {
+        "scored_burns": 8,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.4811881022895468,
+        "component_rmse_m_s": [
+          0.08617263719138582,
+          0.41928705064247157,
+          0.21980590426108815
+        ],
+        "component_bias_m_s": [
+          -0.01754325686056526,
+          -0.054177476637688536,
+          0.07084176700169043
+        ],
+        "maximum_vector_error_m_s": 0.8236271042249323
+      },
+      "failures": [],
+      "warnings": []
+    }
+  ],
+  "coefficients_in_standardized_coordinates": [
+    {
+      "intercept_m_s": 0.044015510423842615,
+      "terms": [
+        {
+          "term": "rx[k-0]",
+          "coefficient_m_s": -0.11213584587708535
+        },
+        {
+          "term": "sin_phase[k-3] vz[k-0]",
+          "coefficient_m_s": -0.07261560243644584
+        },
+        {
+          "term": "sin_phase[k-1] rz[k-0]",
+          "coefficient_m_s": -0.058034121719627046
+        },
+        {
+          "term": "rx[k-0] wait_fraction",
+          "coefficient_m_s": 0.1362434259893148
+        }
+      ]
+    },
+    {
+      "intercept_m_s": -0.009760127024016055,
+      "terms": [
+        {
+          "term": "vz[k-0]",
+          "coefficient_m_s": -0.27035971200032005
+        },
+        {
+          "term": "vz[k-2] sin_phase[k-1]",
+          "coefficient_m_s": -0.14768467598480325
+        },
+        {
+          "term": "sin_phase[k-2] ry[k-1]",
+          "coefficient_m_s": 0.1978350974224004
+        },
+        {
+          "term": "sin_phase[k-0] dvz[k-3]",
+          "coefficient_m_s": 0.3848424056885903
+        }
+      ]
+    },
+    {
+      "intercept_m_s": -0.03589611360354769,
+      "terms": [
+        {
+          "term": "cos_phase[k-3] rz[k-0]",
+          "coefficient_m_s": 0.13976736938112053
+        },
+        {
+          "term": "sin_phase[k-2] vz[k-0]",
+          "coefficient_m_s": 0.18750332937658679
+        },
+        {
+          "term": "rz[k-0] wait_fraction",
+          "coefficient_m_s": 0.32137625602785785
+        },
+        {
+          "term": "vz[k-0] dvx[k-3]",
+          "coefficient_m_s": -0.09260903982286642
+        }
+      ]
+    }
+  ],
+  "splits": {
+    "training": {
+      "arcs": 20,
+      "usable_burns": 41,
+      "all_reference_burns": 59,
+      "recursive": {
+        "scored_burns": 41,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.28707971956762346,
+        "component_rmse_m_s": [
+          0.06783429966356937,
+          0.24069441206919026,
+          0.14099458562244596
+        ],
+        "component_bias_m_s": [
+          -4.569515497695004e-18,
+          -0.007299151244867046,
+          0.002524452011690369
+        ],
+        "maximum_vector_error_m_s": 0.806660919882458
+      },
+      "reference_history": {
+        "scored_burns": 41,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.2751558443997007,
+        "component_rmse_m_s": [
+          0.06783429966356937,
+          0.2282592825256145,
+          0.13786568259489765
+        ],
+        "component_bias_m_s": [
+          -4.569515497695004e-18,
+          -7.108135218636673e-18,
+          -4.06179155350667e-18
+        ],
+        "maximum_vector_error_m_s": 0.806660919882458
+      },
+      "failures": [],
+      "wait_phase_counts": {
+        "0": 31,
+        "22.5": 0,
+        "45.0": 0,
+        "67.5": 10
+      }
+    },
+    "validation": {
+      "arcs": 5,
+      "usable_burns": 8,
+      "all_reference_burns": 13,
+      "recursive": {
+        "scored_burns": 8,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.25126779720857406,
+        "component_rmse_m_s": [
+          0.10927663091549038,
+          0.16148367792169893,
+          0.1584838970201383
+        ],
+        "component_bias_m_s": [
+          -0.04168738966710383,
+          -0.018121430681822634,
+          0.036798656362883715
+        ],
+        "maximum_vector_error_m_s": 0.4377925331381413
+      },
+      "reference_history": {
+        "scored_burns": 8,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.25126779720857406,
+        "component_rmse_m_s": [
+          0.10927663091549038,
+          0.16148367792169893,
+          0.1584838970201383
+        ],
+        "component_bias_m_s": [
+          -0.04168738966710383,
+          -0.018121430681822634,
+          0.036798656362883715
+        ],
+        "maximum_vector_error_m_s": 0.4377925331381413
+      },
+      "failures": [],
+      "wait_phase_counts": {
+        "0": 3,
+        "22.5": 1,
+        "45.0": 1,
+        "67.5": 3
+      }
+    },
+    "test": {
+      "arcs": 5,
+      "usable_burns": 9,
+      "all_reference_burns": 14,
+      "recursive": {
+        "scored_burns": 9,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.3169557221219605,
+        "component_rmse_m_s": [
+          0.1235007858835535,
+          0.22813871805790223,
+          0.18210219931372354
+        ],
+        "component_bias_m_s": [
+          -0.002272094522944036,
+          -0.02671627895949175,
+          0.00770753342080888
+        ],
+        "maximum_vector_error_m_s": 0.475411034881043
+      },
+      "reference_history": {
+        "scored_burns": 9,
+        "nonfinite_burns": 0,
+        "vector_rmse_m_s": 0.3182746464360336,
+        "component_rmse_m_s": [
+          0.1235007858835535,
+          0.234422906100182,
+          0.17632982602405106
+        ],
+        "component_bias_m_s": [
+          -0.002272094522944036,
+          -0.06852172016177395,
+          0.004780469446117378
+        ],
+        "maximum_vector_error_m_s": 0.48327635891881077
+      },
+      "failures": [],
+      "wait_phase_counts": {
+        "0": 6,
+        "22.5": 2,
+        "45.0": 0,
+        "67.5": 1
+      }
+    }
+  }
+}

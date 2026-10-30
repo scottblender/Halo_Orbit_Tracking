@@ -1,0 +1,16 @@
+{
+  "notebook_executed": true,
+  "figures": 3,
+  "notebook00_unchanged_git_text": true,
+  "notebook00_working_sha256": "9b966741e77ec8cdb2568a732be6f4edf329431fc4177a83e7a340c429018e91",
+  "prediction_rmse_recomputed": true,
+  "common_startup_verified": true,
+  "versions": {
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "scikit-learn": "1.9.1",
+    "joblib": "1.6.0",
+    "nbformat": "5.11.1",
+    "matplotlib": "3.11.2"
+  }
+}

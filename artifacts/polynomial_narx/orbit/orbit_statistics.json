@@ -1,0 +1,25 @@
+{
+  "STM": {
+    "completed_requested_span": true,
+    "last_simulated_day": 365.0,
+    "stop_reason": "completed requested span",
+    "maximum_position_departure_km": 148.91296563672816,
+    "maximum_velocity_departure_m_s": 3.9217118154584036,
+    "cumulative_delta_v_m_s": 39.80556080902093,
+    "rejected_burns": 0,
+    "executed_burns": 64
+  },
+  "Polynomial NARX": {
+    "completed_requested_span": false,
+    "last_simulated_day": 43.312141418858495,
+    "stop_reason": "departure_cutoff",
+    "maximum_position_departure_km": 33412.8959597768,
+    "maximum_velocity_departure_m_s": 472.11843366049715,
+    "cumulative_delta_v_m_s": 8.30275465259305,
+    "rejected_burns": 2,
+    "executed_burns": 5,
+    "maximum_input_training_standard_deviations": 386.42133047873534,
+    "first_day_above_10_training_standard_deviations": 20.14518205528302
+  },
+  "interpretation": "Conditional delta-v test with supplied STM timing; NOT autonomous NARX station keeping. Common STM startup for first four decisions."
+}

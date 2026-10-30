@@ -1,75 +1,33 @@
-# Halo burns: one NARX prediction and one STM reference
+# Halo station-keeping delta-v: polynomial NARX versus STM
 
-[Notebook 00](notebooks/00_gateway_tracking_comparison.ipynb) now ends with a
-full-year STM station-keeping example: halo departure, tracking RMSE, estimated
-position uncertainty and first/last-month uncertainty changes. Its earlier
-11 saved figures are retained. The two new figures and underlying histories
-are saved under [artifacts/stm_baseline](artifacts/stm_baseline/).
+[Notebook 01](notebooks/01_narx_results.ipynb) now uses one **sparse quadratic polynomial NARX**, replacing the neural network in the active experiment. It predicts three rotating-frame delta-v components [m/s] **given the STM reference burn schedule**. Burn/no-burn and timing are supplied, not learned. Gateway tracking remains a separate post-processing question.
 
-[Notebook 01](notebooks/01_narx_results.ipynb) asks two questions:
+Inputs are rotating position/velocity departure [km, m/s], sine/cosine of orbital phase, and the supplied waiting time. Four input samples (current plus three previous) and four previous issued delta-v commands form a causal NARX. The frame conversion removes transport velocity from stored inertial departure. Training and deployment use the same conversion.
 
-- Does one `narxpy` network predict the reference delta-v and burn phase?
-- What happens to the halo orbit when those predicted burns are applied?
+Orthogonal matching pursuit fits a sparse subset of 1,080 possible linear/quadratic terms. Separate trajectories are used for training (20), validation (5), and test (5). Scaling and coefficients use training burns only; validation selects 1, 2, 4, 8, or 12 terms per component. Test data do not select the model. Saved coefficients describe standardized coordinates.
 
-It contains three plots: **NARX versus STM burns**, **prediction residuals**
-(NARX minus STM), and **orbit departure after applying each burn sequence**.
-A short statistics table counts missed burns and measures delta-v and timing
-errors. A phase-count table shows which burn timings the training data cover.
-No other prediction models are compared in Notebook 01. Notebook 00 now shows
-the STM reference tracking and uncertainty after station keeping.
+The notebook shows three figures: predicted delta-v versus STM, prediction residuals, and nonlinear orbit departure with cumulative delta-v. The fitted model, histories, coefficients, data audit, metrics and termination reasons are saved in [artifacts/polynomial_narx](artifacts/polynomial_narx/).
 
-## What STM and the burn procedure mean
+## STM reference and the orbit test
 
-STM means **state transition matrix**. It estimates how a small change now
-changes the future orbit. The STM reference calculation uses that information
-to calculate a correction; it is not a neural network or a perfect answer.
+STM means **state transition matrix**. The reference procedure checks estimated halo departure eight times per orbit. At 50 km position departure or 0.5 m/s velocity departure, it tries burns now or 22.5, 45, or 67.5 degrees later in the time-based orbit cycle. It solves delta-v using the STM, verifies improvement by nonlinear propagation, rejects impulses above 10 m/s, and selects the lowest departure cost with a small fuel penalty. No additional burn is scheduled while one is pending. These are calculated reference commands, not unique truth.
 
-The existing procedure checks the estimated halo departure eight times per
-orbit. At **50 km position departure or 0.5 m/s velocity departure**, it tries
-burning now or 22.5, 45, or 67.5 degrees later in the time-based orbit cycle.
-It calculates a delta-v for each option, propagates the nonlinear orbit to
-check it, rejects impulses above 10 m/s or corrections that do not improve
-departure, and chooses the best remaining correction with a small fuel penalty.
-No additional burn is scheduled while one is pending. This choose-and-apply
-procedure is what the code calls a controller.
+The planned 365-day comparison first computes the STM schedule, then supplies it to the polynomial run. Both use identical initial states and epoch-indexed measurement noise. For the first four decisions, both use the same STM commands to initialize history. Thereafter NARX uses its own estimated state and previous issued commands, with no reference delta-v replacement. Measurements occur every six hours plus decision epochs.
 
-The single NARX learns the burn/no-burn choice, three delta-v components, and
-waiting-time scores together. It has four input-history steps, four past-output
-steps, and 64 hidden units. During its orbit test it uses its own predictions,
-with no STM replacement burns.
+**This tests delta-v prediction conditional on known burn times, not autonomous station keeping.** The reference schedule can become inappropriate as the NARX trajectory diverges. Curves stop at a decision-sampled 20,000 km departure cutoff or numerical failure; sampled departure can overshoot the cutoff. Missing future states are not filled in. This is one paired orbit test, not a Monte Carlo success-rate estimate.
 
 ## Reproduce
 
 ```sh
-python -m pip install -e ".[dev,neural-narx]"
-python -m pytest -q
+python -m pip install -e ".[dev,polynomial-narx]"
+python -m pytest -q --basetemp=work/pytest-local
 python scripts/check_notebooks.py --one notebooks/01_narx_results.ipynb
 ```
 
-The notebook reuses independent 20/5/5 training/validation/test reference
-trajectories, or regenerates them if missing. It trains one network for 600
-epochs and selects the epoch using validation. Test trajectories are used only
-for evaluation. It then runs one matched STM/NARX nonlinear simulation pair
-with a planned 365-day span. Initial states and sensor noise are identical.
-This is one paired orbit test, not a population success-rate estimate.
+The existing STM dataset is reused from its historical `artifacts/neural_narx/teacher_training` location, or generated if missing. That folder contains reference trajectories, not neural predictions. The audit replays targets and checks units, histories, configuration and cadence. PyTorch and narxpy are not required by the active polynomial experiment; the optional `neural-narx` dependencies support historical experiments/tests.
 
-Results, weights, figures and underlying arrays are saved in
-[artifacts/narx_stm_comparison](artifacts/narx_stm_comparison/). Curves stop on
-termination; missing future states are not filled in. Completing the year does
-not imply remaining inside the 100 km / 1 m/s comparison corridor.
-
-The earlier Notebook 00 analyses and their 11 figures are preserved; only its
-introduction and final supplement are revised for the new full-year STM case. Earlier baselines, pure delta-v experiments,
-and annual comparisons remain available in their existing source modules and
-artifact folders; Notebook 01 does not train or compare those additional models.
-
-To rerun only the new ending of Notebook 00 while keeping its earlier outputs:
+[Notebook 00](notebooks/00_gateway_tracking_comparison.ipynb) is unchanged by this replacement. Its earlier visualizations and full-year STM tracking, RMSE and uncertainty study remain intact. Earlier neural implementations and the gradient-boosted baseline remain available as historical source/artifacts; Notebook 01 does not run or compare them.
 
 ```sh
 python scripts/check_notebooks.py --one notebooks/00_gateway_tracking_comparison.ipynb --from-cell 26
 ```
-
-STM post-processing saves both running and 30-day RMSE at decision epochs.
-Position uncertainty is `sqrt(trace(P_rr))` in km: an estimated RMS, not a
-confidence boundary. Finishing 365 days and meeting every departure/tracking
-limit are separate results.

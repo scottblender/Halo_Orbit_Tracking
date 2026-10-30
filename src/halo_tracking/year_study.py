@@ -60,9 +60,9 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
     Returns full time-aligned arrays. Missing observations after a numerical
     failure or large departure remain NaN and are counted as NOT successful.
     """
-    if controller not in ("uncontrolled", "stm", "narx", "neural_narx"):
+    if controller not in ("uncontrolled", "stm", "narx", "neural_narx", "polynomial_narx"):
         raise ValueError("Unknown controller")
-    if controller in ("narx", "neural_narx") and model is None:
+    if controller in ("narx", "neural_narx", "polynomial_narx") and model is None:
         raise ValueError("NARX rollout requires a fitted training-only model")
     if max_departure_km <= 0:
         raise ValueError("max_departure_km must be positive")
@@ -101,8 +101,15 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
         "neural_gate_score": np.full(n, np.nan),
         "neural_feedback_norm": np.full(n, np.nan),
         "neural_input_max_abs_z": np.full(n, np.nan),
+        "polynomial_input_max_abs_z": np.full(n, np.nan),
     }
     neural = None
+    polynomial = None
+    if controller == "polynomial_narx":
+        from .polynomial_narx import PolynomialController
+        if model['bundle']['history_steps'] != L:
+            raise ValueError('Training/deployment history length mismatch')
+        polynomial = PolynomialController(model['bundle'],cfg,observer_period,model['schedule'])
     if controller == "neural_narx":
         from .neural_narx import NeuralController
         if model["history_steps"] != L:
@@ -192,6 +199,11 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
             if k == n - 1:
                 # Terminal evaluation is not an off-cadence policy decision.
                 command = dict(required=False,valid=True,burn=np.zeros(3),delay_tu=0.)
+            elif polynomial is not None:
+                command = polynomial.command(nav,t,k,settings['maximum_impulse_m_s'])
+                records['model_invoked'][k] = command['invoked']
+                if command['invoked']:
+                    records['polynomial_input_max_abs_z'][k] = polynomial.last_input_max_abs_z
             elif neural is not None:
                 current = np.r_[nav, np.sin(2*np.pi*t/observer_period),
                     np.cos(2*np.pi*t/observer_period), float(target_visible),
@@ -229,6 +241,10 @@ def simulate_one_arc(cfg, controller, observer_reference, observer_period,
             else:
                 command = dict(required=False, valid=True,
                                burn=np.zeros(3), delay_tu=0.)
+            if controller in ('stm','polynomial_narx'):
+                records['predicted_valid'][k] = command['valid']
+                records['predicted_delta_v_rotating_m_s'][k] = command['burn']
+                records['predicted_delay_tu'][k] = command['delay_tu']
             if command["required"]:
                 records["maneuver_requested"][k] = True
                 if not command["valid"] or t + command["delay_tu"] > times[-1] + 1e-12:
