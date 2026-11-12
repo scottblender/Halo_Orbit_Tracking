@@ -3,7 +3,6 @@ from pathlib import Path
 import json
 import numpy as np
 from .two_stage_narx import _load
-from .orbit_reference import correct_halo_reference
 from .narx_dataset import _error, _reference
 from .identification import _forward
 
@@ -11,15 +10,35 @@ from .identification import _forward
 def audit_dataset(directory, cfg):
     s = cfg['narx']
     L = int(s['history_steps'])
-    corrected = correct_halo_reference(cfg)
-    T = corrected['orbit']['period_tu']
-    cycle = _reference(np.asarray(corrected['orbit']['state']),T,cfg)
-    reference = lambda t: cycle(float(t) % T)
+    directory = Path(directory)
+    metadata = json.loads((directory / 'metadata.json').read_text())
+    if metadata['configuration'] != s:
+        raise ValueError('Dataset configuration mismatch: regenerate training data')
+
+    splits = {split: _load(directory / (split + '.npz'))
+              for split in ('training', 'validation', 'test')}
+    grid = splits['training']['decision_times_tu']
+    intervals = round(s['arc_duration_periods'] * s['decisions_per_period'])
+    if grid.shape != (intervals + 1,) or not np.isfinite(grid[-1]) or grid[-1] <= 0:
+        raise ValueError('Invalid recorded decision grid')
+    np.testing.assert_allclose(grid, np.linspace(0.0, grid[-1], intervals + 1), rtol=1e-10)
+    # Reproduce the recorded reference, including its period. Re-solving the
+    # orbit correction can give a slightly different period on another platform.
+    T = grid[-1] / s['arc_duration_periods']
+    initial_ref = splits['training']['observer_reference_normalized'][0, 0]
+    cycle = _reference(initial_ref, T, cfg)
+
+    def reference(t):
+        return cycle(float(t) % T)
+
     report = {}
-    for split in ('training','validation','test'):
-        d = _load(Path(directory)/(split+'.npz'))
+    for split, d in splits.items():
         times = d['decision_times_tu']
-        np.testing.assert_allclose(np.diff(times), T/s['decisions_per_period'], rtol=1e-10)
+        np.testing.assert_array_equal(times, grid)
+        phase_error = d['decision_phase_rad'] - 2 * np.pi * times / T
+        np.testing.assert_allclose(np.exp(1j * phase_error), 1, rtol=0, atol=1e-10)
+        initial_states = d['observer_reference_normalized'][:, 0]
+        np.testing.assert_array_equal(initial_states, np.broadcast_to(initial_ref, initial_states.shape))
         nav = d['observer_navigation_error_km_m_s']
         actions = d['observer_applied_delta_v_rotating_m_s']
         for k in range(L,len(times)):
@@ -67,12 +86,9 @@ def audit_dataset(directory, cfg):
         np.testing.assert_allclose(expected,actions,atol=1e-10)
         report[split] = dict(nonlinear_targets_replayed=checked,applied_targets_verified=True,arcs=len(nav),history_steps=L,feasible_burns=int(active.sum()),
             rejected_teacher_labels=int((d['observer_maneuver_required'] & ~d['observer_maneuver_valid']).sum()),
-            decision_spacing_days=float(T/s['decisions_per_period']*cfg['time_unit_s']/86400),
+            decision_spacing_days=float((grid[-1] / intervals) * cfg['time_unit_s'] / 86400),
             measurement_cadence_s=s.get('closed_loop_measurement_cadence_s',21600),
             input_units='MCI departure km,m/s; phase/visibility/count/log normalized covariance',
             target_units='rotating-frame delta-v m/s; delay TU',
             causal_histories_verified=True)
-    metadata=json.loads((Path(directory)/'metadata.json').read_text())
-    if metadata['configuration'] != s:
-        raise ValueError('Dataset configuration mismatch: regenerate training data')
     return report
