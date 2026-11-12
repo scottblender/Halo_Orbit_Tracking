@@ -55,11 +55,11 @@ def ensemble_welch(values, fs, length):
     return f, densities.mean(axis=0), len(segments), int(usable.any(axis=1).sum())
 
 
-def ensemble_coherence(x, y, fs, length):
-    """Studio 08 magnitude-squared coherence on matched Welch windows.
+def ensemble_frequency_response(x, y, fs, length):
+    """Studio 08 PSDs, H1 and coherence on matched within-arc Welch windows.
 
-    Average auto- and cross-spectra over the same windows before taking
-    the ratio. A single-window coherence estimate is uninformative.
+    Average auto- and cross-spectra before forming H1 and coherence. A
+    single-window coherence estimate is uninformative.
     """
     x_windows, y_windows = _welch_windows(x, length), _welch_windows(y, length)
     usable = (np.isfinite(x_windows).all(axis=(-1, -2))
@@ -67,15 +67,24 @@ def ensemble_coherence(x, y, fs, length):
     count, arcs = int(usable.sum()), int(usable.any(axis=1).sum())
     if count < 2:
         shape = (x.shape[-1], length // 2 + 1)
-        return np.fft.rfftfreq(length, 1 / fs), np.full(shape, np.nan), count, arcs
+        missing = np.full(shape, np.nan)
+        return np.fft.rfftfreq(length, 1 / fs), missing, missing, missing, missing, count, arcs
     left, right = x_windows[usable], y_windows[usable]
     f, xx = signal.periodogram(left, fs=fs, window="hann", axis=-1)
     _, yy = signal.periodogram(right, fs=fs, window="hann", axis=-1)
     _, xy = signal.csd(left, right, fs=fs, window="hann", nperseg=length, axis=-1)
-    denominator = xx.mean(axis=0) * yy.mean(axis=0)
-    coherence = np.divide(np.abs(xy.mean(axis=0))**2, denominator,
+    suu, syy, suy = xx.mean(axis=0), yy.mean(axis=0), xy.mean(axis=0)
+    h1 = np.divide(suy, suu, out=np.full_like(suy, np.nan), where=suu > 0)
+    denominator = suu * syy
+    coherence = np.divide(np.abs(suy)**2, denominator,
                           out=np.full_like(denominator, np.nan), where=denominator > 0)
-    return f, np.clip(coherence, 0, 1), count, arcs
+    return f, suu, syy, h1, np.clip(coherence, 0, 1), count, arcs
+
+
+def ensemble_coherence(x, y, fs, length):
+    """Return the coherence and support from the matched Welch estimate."""
+    f, _, _, _, coherence, count, arcs = ensemble_frequency_response(x, y, fs, length)
+    return f, coherence, count, arcs
 
 
 def lag_correlation(response, regressor, lags):
