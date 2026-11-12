@@ -2,6 +2,7 @@
 
 import numpy as np
 from scipy import signal
+from scipy.optimize import least_squares
 
 from .frames import state_transform
 from .identification import _forward
@@ -240,3 +241,85 @@ def fit_ridge(design, target, penalty=1.0):
         return (values - mean) / scale @ coefficients + offset
 
     return predict
+
+
+def set_notebook_plot_style():
+    """Set readable defaults for the figures in the tracking notebook."""
+    import matplotlib as mpl
+
+    mpl.rcParams.update({
+        "font.size": 11,
+        "axes.titlesize": 12,
+        "axes.titleweight": "bold",
+        "axes.labelsize": 11,
+        "axes.labelpad": 5,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "grid.color": "#cbd5e1",
+        "grid.alpha": 0.55,
+        "grid.linewidth": 0.6,
+        "legend.fontsize": 9,
+        "legend.framealpha": 0.92,
+        "lines.linewidth": 1.6,
+        "savefig.facecolor": "white",
+    })
+
+
+def _scheduled_predictions(design, target, valid, burn, coefficients, pole, noise):
+    """Run the scalar signal and innovation filters independently on each arc."""
+    forcing = design @ coefficients
+    signal = np.zeros(len(design))
+    disturbance = np.zeros_like(signal)
+    innovation = np.zeros_like(signal)
+    signal_only = np.full(target.shape, np.nan)
+    one_step = np.full(target.shape, np.nan)
+    noise_pole, noise_zero = noise
+    for k in range(target.shape[1]):
+        signal = np.where(valid[:, k], pole * signal + forcing[:, k], 0)
+        forecast_noise = np.where(valid[:, k], noise_pole * disturbance + noise_zero * innovation, 0)
+        predicted = signal + forecast_noise
+        innovation = np.where(burn[:, k], target[:, k] - predicted, 0)
+        disturbance = forecast_noise + innovation
+        signal_only[:, k] = np.where(valid[:, k], np.where(burn[:, k], signal, 0), np.nan)
+        one_step[:, k] = np.where(valid[:, k], np.where(burn[:, k], predicted, 0), np.nan)
+    return one_step, signal_only
+
+
+def fit_scheduled_prediction_model(features, target, valid, burn, *, colored_noise):
+    """Fit a first-order OE or BJ predictor for an externally supplied schedule.
+
+    Both use a current-input numerator and one signal pole. BJ adds one
+    noise pole and one noise zero. Fit on feasible burns, propagate with
+    zero innovations during coasts, and reset at missing decisions.
+    """
+    x = features[burn]
+    mean, scale = x.mean(axis=0), x.std(axis=0)
+    scale = np.where(scale > 0, scale, 1.0)
+
+    def design_matrix(values):
+        normalized = (values - mean) / scale
+        return np.concatenate((np.ones((*values.shape[:2], 1)), normalized), axis=-1)
+
+    design = design_matrix(features)
+    columns = design.shape[-1]
+    n_dynamics = 3 if colored_noise else 1
+    initial = np.r_[target[burn].mean(), np.zeros(columns - 1 + n_dynamics)]
+    bounds = (np.r_[np.full(columns, -np.inf), np.full(n_dynamics, -0.98)],
+              np.r_[np.full(columns, np.inf), np.full(n_dynamics, 0.98)])
+
+    def evaluate(parameters, x, y, valid_rows, burn_rows):
+        pole = parameters[columns]
+        noise = parameters[columns + 1:] if colored_noise else (0.0, 0.0)
+        return _scheduled_predictions(x, y, valid_rows, burn_rows, parameters[:columns], pole, noise)
+
+    def errors(parameters):
+        one_step, _ = evaluate(parameters, design, target, valid, burn)
+        # The same unit ridge penalty on standardized gains for both fits.
+        return np.r_[target[burn] - one_step[burn], parameters[1:columns]]
+
+    result = least_squares(errors, initial, bounds=bounds, max_nfev=200)
+
+    def predict(values, y, valid_rows, burn_rows):
+        return evaluate(result.x, design_matrix(values), y, valid_rows, burn_rows)
+
+    return predict, result.x[columns:], result.success
