@@ -1,19 +1,72 @@
 """Shared large-font figures for notebook inspection and export."""
 from pathlib import Path
+from string import ascii_lowercase
 import numpy as np
 import matplotlib.pyplot as plt
+from cycler import cycler
 from .frames import to_mci, state_transform
 from .surface_sensor import site_mci
 from .network import sensor_configs
 from .layout import style_3d_axes
 
 def style():
-    """Apply consistent serif styling at notebook and exported figure sizes."""
-    plt.rcParams.update({'font.family':'serif','font.serif':['Times New Roman','Liberation Serif','DejaVu Serif'],
-        'font.size':11,'font.weight':'bold','axes.labelweight':'bold','axes.titleweight':'bold',
-        'axes.labelsize':11,'axes.titlesize':12,'xtick.labelsize':10,'ytick.labelsize':10,
-        'legend.fontsize':10,'legend.frameon':False,'axes.spines.top':False,
-        'axes.spines.right':False,'figure.dpi':110,'lines.linewidth':1.6})
+    """Apply journal-style lettering, rules, and line defaults."""
+    plt.rcParams.update({
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Arial", "Liberation Sans", "DejaVu Sans"],
+        "font.size": 10,
+        "font.weight": "normal",
+        "axes.labelweight": "normal",
+        "axes.titleweight": "normal",
+        "axes.labelsize": 10,
+        "axes.titlesize": 10,
+        "axes.labelpad": 5,
+        "axes.linewidth": 0.65,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.prop_cycle": cycler(color=["#1f5a85", "#a74713", "#007965", "#735589"]),
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "xtick.major.width": 0.65,
+        "ytick.major.width": 0.65,
+        "xtick.major.size": 3,
+        "ytick.major.size": 3,
+        "legend.fontsize": 9,
+        "legend.frameon": False,
+        "grid.color": "#b8c0c8",
+        "grid.linewidth": 0.5,
+        "grid.alpha": 0.6,
+        "lines.linewidth": 1.25,
+        "figure.dpi": 110,
+        "savefig.facecolor": "white",
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+    })
+
+
+def label_figure_panels(fig):
+    """Add lowercase panel labels outside the data area."""
+    if len(fig.axes) < 2:
+        return
+    for letter, ax in zip(ascii_lowercase, fig.axes):
+        ax.annotate(letter, xy=(0, 1), xycoords="axes fraction", xytext=(0, 4),
+                    textcoords="offset points", fontsize=10, fontweight="bold",
+                    ha="left", va="bottom", annotation_clip=False)
+
+
+def show_journal_figure(fig, number, caption, *, path=None, panel_labels=True):
+    """Display a notebook figure with its caption outside the artwork."""
+    from IPython.display import Markdown, display
+
+    if fig.get_suptitle():
+        fig.suptitle("").set_visible(False)
+    if panel_labels:
+        label_figure_panels(fig)
+    if path is not None:
+        export(fig, path)
+    display(fig)
+    display(Markdown(f"**Fig. {number}** {caption}"))
+    plt.close(fig)
 
 def geometry(result):
     """Show one-period mission geometry with equal physical axis scales."""
@@ -34,7 +87,8 @@ def geometry(result):
     fig=plt.figure(figsize=(8.2,6.8),layout='constrained')
     ax=fig.add_subplot(projection='3d');ax.set_proj_type('ortho')
     ax.plot(*(observer/scale).T,color='#245b80',label='Halo observer')
-    if target is not None:ax.plot(*(target/scale).T,color='#ca7139',label='Lunar Gateway')
+    if target is not None:
+        ax.plot(*(target/scale).T, color='#a74713', ls='--', label='Lunar Gateway')
     # The physical Moon radius is retained; it is not enlarged to imply range.
     u=np.linspace(0,2*np.pi,32);v=np.linspace(0,np.pi,16)
     radius=cfg['site']['radius_km']/scale
@@ -72,14 +126,16 @@ def gateway_comparison_figures(result):
     style(); metrics=comparison_metrics(result)
     days=result['times']*result['config']['time_unit_s']/86400
     names=['perfect','lso_estimated']; labels=['Perfect observer knowledge','Observer estimated from LSO']
-    colors=['#245b80','#ca7139']; figures={}
+    colors=['#245b80','#a74713']; figures={}
     for kind,title,keys in [
         ('errors','Gateway estimation errors — one shared noise realization',['position_error_km','velocity_error_m_s']),
         ('uncertainty','Gateway predicted uncertainty — local covariance',['position_forecast_rss_sigma_km','velocity_forecast_rss_sigma_m_s'])]:
         fig,axes=plt.subplots(2,1,figsize=(9.4,6.2),sharex=True,layout='constrained')
         fig.get_layout_engine().set(hspace=.10)
-        for name,label,color in zip(names,labels,colors):
-            for j,ax in enumerate(axes):ax.semilogy(days,metrics[name][keys[j]],color=color,label=label)
+        for name, label, color, linestyle in zip(names, labels, colors, ('-', '--')):
+            for j, ax in enumerate(axes):
+                ax.semilogy(days, metrics[name][keys[j]], color=color, ls=linestyle, label=label)
+                ax.grid(axis='y')
         axes[0].set_ylabel('Position '+('error' if kind=='errors' else 'RSS σ')+' (km)')
         axes[1].set_ylabel('Velocity '+('error' if kind=='errors' else 'RSS σ')+' (m/s)')
         axes[1].set_xlabel('Time (days)')
@@ -108,6 +164,7 @@ def observer_knowledge(result):
         for start,end in zip(np.flatnonzero(edges==1),np.flatnonzero(edges==-1)):
             ax.axvspan(days[start],days[min(end,len(days)-1)],color='#80a78a',alpha=.14)
         ax.set_ylabel(['Position (km)','Velocity (m/s)'][j])
+        ax.grid(axis='y')
     fig.legend(*axes[0].get_legend_handles_labels(),
                loc='outside lower center', ncol=2, fontsize=9, frameon=False)
     axes[1].set_xlabel('Time (days)')
@@ -303,11 +360,11 @@ def gateway_prediction_figure(study):
     fig, axes = plt.subplots(3, 1, figsize=(11.8, 9.1),
                              sharex=True, layout='constrained')
     ax = axes[0]
-    for name in ('perfect', 'lso_estimated'):
+    for name, linestyle in zip(('perfect', 'lso_estimated'), ('-', '--')):
         ax.semilogy(days, np.maximum(h[name+'_position_error_km'], 1e-6),
-                    color=colors[name], label=labels[name])
+                    color=colors[name], ls=linestyle, label=labels[name])
         ax.semilogy(days, np.maximum(h[name+'_filter_position_sigma_km'], 1e-6),
-                    color=colors[name], alpha=.48, ls=':',
+                    color=colors[name], alpha=.65, ls=':' if name == 'perfect' else '-.',
                     label=labels[name]+' conditional RSS σ')
     for limit in meta['thresholds_km']:
         ax.axhline(limit, color='gray', lw=.65, ls='--', alpha=.42)
@@ -315,9 +372,9 @@ def gateway_prediction_figure(study):
     ax.legend(loc='upper left', fontsize=8, ncol=2)
 
     ax = axes[1]
-    for name in ('perfect', 'lso_estimated'):
+    for name, linestyle in zip(('perfect', 'lso_estimated'), ('-', '--')):
         ax.semilogy(days, np.maximum(h[name+'_rolling_position_rmse_km'], 1e-6),
-                    color=colors[name], label=labels[name])
+                    color=colors[name], ls=linestyle, label=labels[name])
     ax.set_ylabel(f"Rolling {meta['rolling_window_days']:g}-day RMSE (km)")
     ax.legend(loc='upper left', fontsize=9)
 
