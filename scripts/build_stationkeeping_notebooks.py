@@ -171,20 +171,25 @@ np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items()
 (OUT/'optical_residual_summary.json').write_text(json.dumps({k:v for k,v in residual.items() if not isinstance(v,np.ndarray)},indent=2)+'\\n')
 '''),
 ('md', r'''
-## Does LSO-guided station keeping meet the limits?
+## Do LSO-guided station keeping limits hold over a year?
 
-Guidance selects no burn or an impulse now/one/two intervals later using only the LSO-derived departure estimate, without truth feedback or a supplied burn schedule. The estimator coasts through outages. Candidate burns are checked by nonlinear propagation. Both sides of impulses and coast substeps are evaluated against the **3-D norm** limits.
+Guidance uses only the LSO-derived departure estimate, with state updates at every measurement sample and planner calls every eight samples (about half a day). Candidate burns are checked by nonlinear propagation. The one-year run reports sampled corridor performance and the cumulative commanded Δv from the actual simulated impulses.
 
-This single predeclared trial establishes sampled performance, not a continuous-time guarantee or population success rate. A failure can arise from navigation, prediction or the single-impulse planner. This plot alone cannot assign it to a model class.
+This is one simulated year, not a continuous-time guarantee or a population success rate. A failure can arise from navigation, prediction or the single-impulse planner.
 '''),
 ('code', '''
-trial=sk.stationkeeping_trial(orbit,gains)
+trial=sk.stationkeeping_trial(
+    orbit,gains,
+    duration_days=orbit.settings['annual_horizon_days'],
+    planning_stride_steps=orbit.settings['annual_planning_stride_steps'],
+    stop_on_departure_cutoff=False)
 if (OUT/'uncontrolled.npz').exists():
     with np.load(OUT/'uncontrolled.npz') as z: no_day,no_y=z['day'],z['output']
 else: no_day,no_y,_=sk.uncontrolled(orbit)
 plots.controlled(orbit,trial,no_day,no_y,OUT/'figures')
+plots.annual_delta_v(trial,OUT/'figures')
 summary=trial['summary']
-table(['Metric','Observed value'],[(k,summary[k]) for k in ('completed','last_day','maximum_position_km','maximum_velocity_m_s','all_evaluated_samples_inside','first_sampled_exit_day','burns','total_commanded_delta_v_m_s','visible_epoch_fraction')])
+table(['Metric','Observed value'],[(k,summary[k]) for k in ('completed','requested_duration_days','last_day','planning_stride_steps','maximum_position_km','maximum_velocity_m_s','all_evaluated_samples_inside','first_sampled_exit_day','burns','total_commanded_delta_v_m_s','annual_delta_v_m_s','visible_epoch_fraction')])
 np.savez_compressed(OUT/'closed_loop.npz',**{k:v for k,v in trial.items() if k!='summary'})
 (OUT/'closed_loop_summary.json').write_text(json.dumps(summary,indent=2)+'\\n')
 rejects=int(np.nansum(residual['ljung_box_holm_p']<.05))
