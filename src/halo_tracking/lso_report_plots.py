@@ -2,7 +2,8 @@
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch, Circle
+from matplotlib.patches import FancyBboxPatch, Circle, Patch
+from matplotlib.lines import Line2D
 from IPython.display import display, Markdown
 from .measurements import ARCSEC
 from .stationkeeping_plots import style
@@ -12,36 +13,72 @@ from .surface_sensor import site_rotating
 BLUE, GREEN, RED = '#1414B4', '#0B9A0B', '#C00000'
 
 
-def finish(fig,out,name,purpose,result):
-    fig.tight_layout(pad=1.6)
+def finish(fig,out,name,purpose,result,layout_rect=None):
+    if layout_rect is None:
+        fig.tight_layout(pad=1.6)
+    else:
+        fig.tight_layout(pad=1.6,rect=layout_rect)
     Path(out).mkdir(parents=True,exist_ok=True)
     fig.savefig(Path(out)/(name+'.png'),dpi=150,bbox_inches='tight')
-    plt.show(); plt.close(fig)
+    plt.show()
+    plt.close(fig)
     display(Markdown('**Purpose:** '+purpose+'\n\n**Result:** '+result))
 
 
 def diagram(orbit,out):
-    fig,ax=plt.subplots(figsize=(16,7))
-    ax.set(xlim=(0,12),ylim=(0,5));ax.axis('off')
-    nodes=[(2,3.6,'Impulse actuator\ncommand × fitted gain'),
-           (6,3.6,'Nonlinear NRHO dynamics\nEarth–Moon gravity'),
-           (10,3.6,'Three lunar observatories\nline-of-sight geometry'),
-           (10,1.3,'Angular observations\nnoise + visibility gaps'),
-           (6,1.3,'STM state estimator\nsubtract nominal orbit'),
-           (2,1.3,'Station-keeping planner\nimpulse magnitude + phase')]
-    for x,y,text in nodes:
-        ax.add_patch(FancyBboxPatch((x-1.65,y-.55),3.3,1.1,boxstyle='round,pad=0.08',
-                                    facecolor='#eef2ff',edgecolor=BLUE,lw=1.6))
-        ax.text(x,y,text,ha='center',va='center',fontsize=13,fontweight='bold')
-    for start,end in [((3.75,3.6),(4.25,3.6)),((7.75,3.6),(8.25,3.6)),
-                      ((10,2.95),(10,1.95)),((8.25,1.3),(7.75,1.3)),
-                      ((4.25,1.3),(3.75,1.3)),((2,1.95),(2,2.95))]:
-        ax.annotate('',xy=end,xytext=start,arrowprops=dict(arrowstyle='->',lw=2,color=BLUE))
-    ax.text(6,.12,'Identification fits gains using raw angular innovations. Truth is reserved for simulation and evaluation.',
-            ha='center',fontsize=12)
+    fig,ax=plt.subplots(figsize=(18,9))
+    ax.set(xlim=(0,18.5),ylim=(0,9))
+    ax.axis('off')
+    boxes=[
+        (1.5,5.7,2.4,1.3,'Input\n$u_k$: commanded $\\Delta v$ [m/s]','#eaf7ee'),
+        (4.7,5.7,3.0,1.3,'Plant\nnonlinear CR3BP\nactual burn $G u_k$','#edf1ff'),
+        (8.0,5.7,2.9,1.3,'State output\n$e_k=[\\delta r_k,\\delta v_k]$','#edf1ff'),
+        (11.1,5.7,3.0,1.3,'LSO sensor geometry\nideal angles $h_j(t_k,x_k)$','#edf1ff'),
+        (16.2,5.7,3.0,1.3,'Measured output\n$z_{j,k}=[\\alpha,\\delta]$\nvisible sites only','#fff3e8'),
+        (13.6,2.6,4.0,1.3,'State estimator\nperiodic STM, raw angle updates','#fff8dc'),
+        (7.8,2.6,3.8,1.3,'Station-keeping planner\nselects burn size and phase','#eaf7ee'),
+        (13.6,7.9,3.0,1.0,'Sensor noise\n$v_{j,k}\\sim\\mathcal{N}(0,R)$\n$R=\\sigma_\\theta^2 I_2$','#fff3e8')
+    ]
+    for x,y,w,h,label,color in boxes:
+        ax.add_patch(FancyBboxPatch((x-w/2,y-h/2),w,h,boxstyle='round,pad=0.08',
+                                    facecolor=color,edgecolor=BLUE,lw=1.7))
+        ax.text(x,y,label,ha='center',va='center',fontsize=12,fontweight='bold')
+
+    def arrow(start,end):
+        ax.annotate('',xy=end,xytext=start,
+                    arrowprops=dict(arrowstyle='->',lw=1.9,color=BLUE,shrinkA=2,shrinkB=2))
+
+    arrow((2.72,5.7),(3.18,5.7))
+    arrow((6.22,5.7),(6.53,5.7))
+    arrow((9.45,5.7),(9.58,5.7))
+    arrow((12.62,5.7),(13.27,5.7))
+    ax.add_patch(Circle((13.6,5.7),.28,facecolor='white',edgecolor=BLUE,lw=1.8,zorder=4))
+    ax.text(13.6,5.7,'+',ha='center',va='center',fontsize=17,fontweight='bold',zorder=5)
+    arrow((13.6,7.38),(13.6,6.0))
+    ax.text(14.0,6.7,'added at sensor output',ha='left',va='center',fontsize=10,color='#333333')
+    arrow((13.92,5.7),(14.68,5.7))
+
+    arrow((16.0,5.02),(14.7,3.28))
+    ax.text(16.15,4.05,'raw visible angles',ha='left',va='center',fontsize=10,color='#333333')
+    arrow((11.58,2.6),(9.72,2.6))
+    ax.text(10.65,2.88,'estimated departure $\\hat e_k$',ha='center',va='bottom',fontsize=10,color='#333333')
+    ax.annotate('',xy=(1.5,3.25),xytext=(5.9,2.6),
+                arrowprops=dict(arrowstyle='->',lw=1.9,color=BLUE,
+                                connectionstyle='angle3,angleA=0,angleB=90'))
+    ax.annotate('',xy=(1.5,5.02),xytext=(1.5,3.25),
+                arrowprops=dict(arrowstyle='->',lw=1.9,color=BLUE))
+    ax.text(3.35,3.45,'planned command $u_{k+1}$',ha='center',va='bottom',fontsize=10,color='#333333')
+
+    ax.text(9.2,1.25,
+            'Input: commanded impulse $u_k$. Physical state output: departure $e_k$. Identification output: visible raw LSO angles $z_{j,k}$.',
+            ha='center',va='center',fontsize=11)
+    ax.text(9.2,.72,
+            'Noise is added after the ideal angle calculation. Independent Gaussian white noise with $\\sigma_\\theta=1$ arcsec is a synthetic assumption, not hardware calibration.',
+            ha='center',va='center',fontsize=11)
+
     finish(fig,out,'00_lso_feedback_diagram',
-           'This diagram identifies the measurement and feedback paths used to keep the NRHO near its nominal orbit.',
-           f'The {len(orbit.sites)} LSOs provide angles rather than direct position or velocity measurements, so visibility and state estimation are part of the station-keeping problem.')
+           'This diagram separates the command input, physical state, angular measurement output and the point where sensor noise enters.',
+           f'The simulator adds independent angle noise to each visible LSO measurement after computing ideal line-of-sight angles. Its 1 arcsec white Gaussian model is explicit, but is not calibrated from real LSO data.')
 
 
 def inputs_outputs(orbit,rec,out):
@@ -155,33 +192,58 @@ def structure(d,out):
 
 
 def geometry_growth(orbit,day,y,summary,out):
-    # Orthographic projections avoid the overlapping 3-D labels of the old plot.
     xyz=(orbit.reference(np.linspace(0,orbit.T,800,endpoint=False))[:3].T-
          np.array([1-orbit.cfg['mu'],0,0]))*orbit.cfg['length_unit_km']/1000
-    fig,axs=plt.subplots(2,2,figsize=(17,11))
-    for ax,c in [(axs[0,0],1),(axs[1,0],2)]:
-        ax.plot(xyz[:,0],xyz[:,c],color=BLUE,label='Nominal NRHO')
-        ax.add_patch(Circle((0,0),orbit.cfg['site']['radius_km']/1000,color='grey',alpha=.6,label='Moon'))
-        for j,site in enumerate(orbit.sites):
-            q=site_rotating(site)*orbit.cfg['length_unit_km']/1000
-            ax.scatter(q[0],q[c],s=25,label=f'LSO {j+1}')
-        ax.set(xlabel='Moon-centred x [10³ km]',ylabel='Moon-centred '+'xyz'[c]+' [10³ km]',aspect='equal')
-        ax.grid(alpha=.2)
-    axs[0,0].legend(fontsize=10,ncol=2)
-    first=[]
-    for ax,sl,limit,label in [(axs[0,1],slice(0,3),10.,'Position departure [km]'),
-                              (axs[1,1],slice(3,6),.1,'Velocity departure [m/s]')]:
+    fig=plt.figure(figsize=(18,9))
+    gs=fig.add_gridspec(2,3,width_ratios=[1.15,1.15,.9],wspace=.42,hspace=.32)
+    ax3d=fig.add_subplot(gs[:, :2],projection='3d')
+    axp=fig.add_subplot(gs[0,2])
+    axv=fig.add_subplot(gs[1,2])
+
+    ax3d.plot(xyz[:,0],xyz[:,1],xyz[:,2],color=BLUE,lw=2)
+    radius=orbit.cfg['site']['radius_km']/1000
+    sphere_u,sphere_v=np.meshgrid(np.linspace(0,2*np.pi,32),np.linspace(0,np.pi,18))
+    mx=radius*np.cos(sphere_u)*np.sin(sphere_v)
+    my=radius*np.sin(sphere_u)*np.sin(sphere_v)
+    mz=radius*np.cos(sphere_v)
+    ax3d.plot_surface(mx,my,mz,color='grey',alpha=.55,linewidth=0,shade=True)
+    site_colors=[BLUE,'#ff7f0e',GREEN]
+    for j,site in enumerate(orbit.sites):
+        q=site_rotating(site)*orbit.cfg['length_unit_km']/1000
+        ax3d.scatter(q[0],q[1],q[2],s=32,color=site_colors[j%len(site_colors)])
+
+    handles=[
+        Line2D([0],[0],color=BLUE,lw=2,label='Nominal NRHO'),
+        Patch(facecolor='grey',edgecolor='grey',alpha=.55,label='Moon')
+    ]
+    handles.extend(Line2D([0],[0],marker='o',linestyle='None',color='none',
+                          markerfacecolor=site_colors[j%len(site_colors)],markersize=7,
+                          label=f'LSO {j+1}') for j in range(len(orbit.sites)))
+    ax3d.set(xlabel='Moon-centred x [10³ km]',
+             ylabel='Moon-centred y [10³ km]',
+             zlabel='Moon-centred z [10³ km]',
+             title='Nominal NRHO and LSO locations')
+    ax3d.set_box_aspect(np.maximum(np.ptp(xyz,axis=0),1.0))
+    ax3d.view_init(elev=24,azim=-58)
+    fig.legend(handles=handles,loc='center left',bbox_to_anchor=(.835,.5),frameon=True,fontsize=11)
+
+    for ax,sl,limit,label in [(axp,slice(0,3),10.,'Position departure [km]'),
+                              (axv,slice(3,6),.1,'Velocity departure [m/s]')]:
         value=np.linalg.norm(y[:,sl],axis=1)
         ax.semilogy(day,value,color=BLUE)
         ax.axhline(limit,color=RED,ls='--',label='Required limit')
         use=np.flatnonzero(value>limit)
-        first.append(float(day[use[0]]) if len(use) else None)
-        if len(use):ax.axvline(day[use[0]],color='grey',ls=':',lw=1)
-        ax.set(xlabel='Elapsed time [day]',ylabel=label);ax.grid(alpha=.2);ax.legend(fontsize=11)
-    peakp=np.linalg.norm(y[:,:3],axis=1).max();peakv=np.linalg.norm(y[:,3:],axis=1).max()
+        if len(use):
+            ax.axvline(day[use[0]],color='grey',ls=':',lw=1)
+        ax.set(xlabel='Elapsed time [day]',ylabel=label)
+        ax.grid(alpha=.2)
+        ax.legend(fontsize=10,loc='upper left')
+    peakp=np.linalg.norm(y[:,:3],axis=1).max()
+    peakv=np.linalg.norm(y[:,3:],axis=1).max()
     finish(fig,out,'07_geometry_long_uncontrolled',
-           'Moon-centred orbit projections locate the LSOs, while a continuous unforced trajectory shows how a small initial departure grows over the extended propagation.',
-           f'By day {day[-1]:.1f}, peak departures reach {peakp:.3g} km and {peakv:.3g} m/s, with the declared stop condition recorded as “{summary["stop_reason"]}”.')
+           'The 3D Moon-centred view locates the LSOs relative to the NRHO, while the adjacent panels show growth in the state departures.',
+           f'By day {day[-1]:.1f}, peak departures reach {peakp:.3g} km and {peakv:.3g} m/s, with the declared stop condition recorded as “{summary["stop_reason"]}”.',
+           layout_rect=(0,0,.82,1))
 
 
 def validation(orbit,rec,pred,free,out):
