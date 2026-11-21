@@ -146,7 +146,7 @@ def structure(orbit, rec, diagnostics, ccf, spec, output):
         axs[1].plot(diagnostics['phase_deg'], np.linalg.norm(sens[:,:,c],axis=1),label='Δv '+'xyz'[c])
     axs[1].set(xlabel='Orbit phase [deg]',ylabel='Scaled horizon response / (m/s)')
     axs[1].legend()
-    axs[2].loglog(diagnostics['amplitudes_km'],diagnostics['linearity_relative_error'].T,'o-',alpha=.65)
+    axs[2].loglog(diagnostics['amplitudes_km'],diagnostics['linearity_relative_error'],'o-',alpha=.65)
     axs[2].set(xlabel='Perturbation scale [km]',ylabel='STM / nonlinear relative error')
     for ax in axs:
         ax.grid()

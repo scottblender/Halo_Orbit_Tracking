@@ -61,7 +61,7 @@ These are simulated identification experiments, not flight telemetry or an optic
 ('md', r'''
 ## Welch spectra and empirical frequency response
 
-Following Studios 7–8, start with a Hann window, 50% overlap and 32 samples per segment, then repeat with 16 and 64 to expose the resolution/variance trade. Average spectra **within** separate trajectories before forming ratios. Never join endpoints from different experiments.
+Following Studios 7–8, start with a Hann window, 50% overlap and 32 samples per segment, then repeat with 16, 64 and 128 to expose the resolution/variance trade. A 32-sample segment spans only a quarter orbit and cannot resolve the orbital fundamental. A full-orbit window improves resolution but leaves only one window per independent trajectory. Average spectra **within** separate trajectories before forming ratios. Never join endpoints from different experiments.
 
 The full three-input estimate is $\hat H=\hat S_{yu}\hat S_{uu}^{-1}$; the cross-spectrum uses $Y\,U^*$. Pairwise coherence screens weak channels, while input spectral conditioning screens unreliable inversion. Because an orbit can be phase dependent and departures can be nonstationary, these are **finite-record summaries**, not an established global LTI transfer function. Input PSD bands use the conservative non-overlapping segment count; formal output/FRF confidence bands are deferred until stationarity is justified.
 '''),
@@ -72,14 +72,14 @@ spec = sd.welch_bundle(training.u, training.y[:,:-1], 1/orbit.dt_s,
 table(['Length','Resolution [cycle/day]','Overlapping windows','Conservative DOF'],
       [(L, f'{86400/(orbit.dt_s*L):.3f}',
         sd.welch_bundle(training.u,training.y[:,:-1],1/orbit.dt_s,L)['segments'],
-        sd.welch_bundle(training.u,training.y[:,:-1],1/orbit.dt_s,L)['dof']) for L in (16,32,64)])
+        sd.welch_bundle(training.u,training.y[:,:-1],1/orbit.dt_s,L)['dof']) for L in (16,32,64,128)])
 plots.spectra(spec, orbit, OUT/'figures')
 plots.frf(spec, OUT/'figures')
 '''),
 ('code', '''
 import matplotlib.pyplot as plt
 fig, axs = plt.subplots(1,2,figsize=(15,5))
-for L in (16,32,64):
+for L in (16,32,64,128):
     q = sd.welch_bundle(training.u,training.y[:,:-1],1/orbit.dt_s,L)
     axs[0].semilogy(q['f'][1:]*86400,q['syy'][1:,0]/86400,label=f'L={L}')
     axs[1].semilogy(q['f'][1:]*86400,abs(q['H'][1:,0,0]),label=f'L={L}')
