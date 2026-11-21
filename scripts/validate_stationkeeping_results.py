@@ -15,7 +15,7 @@ for name in ('01_stationkeeping_identification.ipynb','02_stm_greybox_stationkee
             assert cell.execution_count is not None, (name,'unexecuted code')
             assert not any(o.output_type=='error' for o in cell.outputs)
     figures=sum('image/png' in o.get('data',{}) for c in nb.cells for o in c.get('outputs',[]))
-    expected=8 if name.startswith('01_') else 3
+    expected=8 if name.startswith('01_') else 4
     assert figures == expected, (name,'unexpected figure count',figures,expected)
     captions=sum('**Purpose:**' in str(o.get('data',{}).get('text/markdown','')) and
                  '**Result:**' in str(o.get('data',{}).get('text/markdown',''))
@@ -51,5 +51,9 @@ summary=json.loads((OUT/'closed_loop_summary.json').read_text())
 print('Observed nonlinear corridor result:',json.dumps(summary,indent=2))
 assert np.isfinite(summary['maximum_position_km'])
 assert np.isfinite(summary['maximum_velocity_m_s'])
+assert summary['completed'], 'one-year simulation did not complete'
+assert np.isclose(summary['requested_duration_days'],365.25)
+assert np.isfinite(summary['annual_delta_v_m_s'])
+print('One-year cumulative commanded delta-v [m/s]:',summary['annual_delta_v_m_s'])
 # Scientific execution success is separate from controller corridor success.
 
