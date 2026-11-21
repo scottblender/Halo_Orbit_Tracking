@@ -22,6 +22,8 @@ jobs:
           python -m pytest -q tests/test_stationkeeping.py tests/test_lso_stationkeeping.py
           tests/test_reference_correction.py tests/test_stability.py
           tests/test_scientific_models.py
+      - name: Build notebooks from current sources
+        run: python scripts/build_stationkeeping_notebooks.py
       - name: Execute both station-keeping notebooks
         run: python scripts/check_notebooks.py --in-process
       - name: Validate executed notebooks and saved results
