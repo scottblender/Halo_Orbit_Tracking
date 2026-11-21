@@ -234,10 +234,25 @@ def uncontrolled(orbit):
                                           last_day=float(days[-1]), stop_reason=reason)
 
 
-def stationkeeping_trial(orbit, gains, seed=26960):
-    """Guidance uses only a visible-angle state estimate, including during gaps."""
+def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
+                        planning_stride_steps=1, stop_on_departure_cutoff=True):
+    """Simulate LSO-guided nonlinear station keeping for a fixed requested span.
+
+    State estimates use visible noisy angles only. The longer annual case can
+    reduce planner calls while retaining measurement and state updates at every
+    sample. Truth is used only by the sensor simulator and evaluation summary.
+    """
     s = orbit.settings
-    count = s['stationkeeping_periods']*orbit.n
+    if duration_days is None:
+        count = s['stationkeeping_periods']*orbit.n
+        requested_days = count*orbit.dt_s/86400
+    else:
+        if duration_days <= 0:
+            raise ValueError('duration_days must be positive')
+        count = int(np.ceil(duration_days*86400/orbit.dt_s))
+        requested_days = float(duration_days)
+    if planning_stride_steps < 1:
+        raise ValueError('planning_stride_steps must be at least 1')
     state = orbit.state(np.array([.03,-.02,.01,.0003,-.0002,.0001]), 0.)
     z, P = np.zeros(6), orbit.P0.copy()
     outputs, days = [orbit.output(state, 0.)], [0.]
@@ -260,11 +275,11 @@ def stationkeeping_trial(orbit, gains, seed=26960):
         covariance.append(P*orbit.scale[:,None]*orbit.scale[None,:])
         if k == count:
             break
-        if np.linalg.norm(outputs[-1][:3]) > s['uncontrolled_stop_km']:
+        if stop_on_departure_cutoff and np.linalg.norm(outputs[-1][:3]) > s['uncontrolled_stop_km']:
             stop_reason = 'departure cutoff; remaining span not simulated'
             break
         command = np.zeros(3)
-        if pending is None:
+        if pending is None and k % planning_stride_steps == 0:
             plan = physics.plan_burn(orbit, z*orbit.scale, k, gains)
             if plan['delay'] >= 0 and np.linalg.norm(plan['command']) > 1e-10:
                 pending, scheduled = plan['command'], k+plan['delay']
@@ -282,14 +297,20 @@ def stationkeeping_trial(orbit, gains, seed=26960):
     y, day = np.asarray(outputs), np.asarray(days)
     pos, vel = np.linalg.norm(y[:,:3],axis=1),np.linalg.norm(y[:,3:],axis=1)
     outside = (pos>s['position_limit_km']) | (vel>s['velocity_limit_m_s'])
+    total_delta_v=float(sum(np.linalg.norm(u) for u in commands))
+    completed=len(nav)==count+1
+    annual_requested=np.isclose(requested_days,365.25,atol=1e-6)
     summary = dict(seed=seed, measurement_source='lso_angles',
-                   completed=len(nav)==count+1, stop_reason=stop_reason, last_day=float(day[-1]),
+                   requested_duration_days=requested_days,
+                   planning_stride_steps=int(planning_stride_steps),
+                   completed=completed, stop_reason=stop_reason, last_day=float(day[-1]),
                    maximum_position_km=float(pos.max()), maximum_velocity_m_s=float(vel.max()),
                    all_evaluated_samples_inside=bool(not outside.any()),
                    first_sampled_exit_day=float(day[outside][0]) if outside.any() else None,
-                   burns=len(commands), total_commanded_delta_v_m_s=float(sum(np.linalg.norm(u) for u in commands)),
+                   burns=len(commands), total_commanded_delta_v_m_s=total_delta_v,
+                   annual_delta_v_m_s=total_delta_v if annual_requested and completed else None,
                    visible_epoch_fraction=float(np.mean(np.any(visibility,axis=1))),
-                   interpretation='LSO-derived guidance; truth only for evaluation; sampled corridor test')
+                   interpretation='LSO-derived guidance; truth only for sensor simulation/evaluation; sampled corridor test')
     return dict(day=day, output=y, burn_day=np.asarray(burn_day),commands=np.asarray(commands).reshape(-1,3),
                 phase_deg=np.asarray(phases),navigation=np.asarray(nav),angles=np.asarray(raw),
                 visible=np.asarray(visibility),covariance=np.asarray(covariance),summary=summary)
