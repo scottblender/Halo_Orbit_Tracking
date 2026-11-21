@@ -173,7 +173,7 @@ np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items()
 ('md', r'''
 ## Do LSO-guided station keeping limits hold over a year?
 
-Guidance uses only the LSO-derived departure estimate, with state updates at every measurement sample and planner calls every eight samples (about half a day). Candidate burns are checked by nonlinear propagation. The one-year run reports sampled corridor performance and the cumulative commanded Δv from the actual simulated impulses.
+Guidance uses only the LSO-derived departure estimate, with state updates at every measurement sample and planner calls at every measurement sample (about 1.5 hours). Candidate burns are checked by nonlinear propagation. The one-year run reports sampled corridor performance and the cumulative commanded Δv from the actual simulated impulses.
 
 This is one simulated year, not a continuous-time guarantee or a population success rate. A failure can arise from navigation, prediction or the single-impulse planner.
 '''),
