@@ -191,14 +191,15 @@ def structure(d,out):
            f'Horizon sensitivity varies by a factor of {ratio:.2g} over phase and the largest multiplier is {radius:.3g}, supporting a time-varying local model'+(' with an unstable mode.' if radius>1.001 else ' whose stability needs further resolution.'))
 
 
+
 def geometry_growth(orbit,day,y,summary,out):
     xyz=(orbit.reference(np.linspace(0,orbit.T,800,endpoint=False))[:3].T-
          np.array([1-orbit.cfg['mu'],0,0]))*orbit.cfg['length_unit_km']/1000
-    fig=plt.figure(figsize=(18,9))
-    gs=fig.add_gridspec(2,3,width_ratios=[1.15,1.15,.9],wspace=.42,hspace=.32)
-    ax3d=fig.add_subplot(gs[:, :2],projection='3d')
-    axp=fig.add_subplot(gs[0,2])
-    axv=fig.add_subplot(gs[1,2])
+    fig=plt.figure(figsize=(17,13))
+    gs=fig.add_gridspec(2,2,height_ratios=[1.7,1],wspace=.3,hspace=.34)
+    ax3d=fig.add_subplot(gs[0,:],projection='3d')
+    axp=fig.add_subplot(gs[1,0])
+    axv=fig.add_subplot(gs[1,1])
 
     ax3d.plot(xyz[:,0],xyz[:,1],xyz[:,2],color=BLUE,lw=2)
     radius=orbit.cfg['site']['radius_km']/1000
@@ -211,7 +212,6 @@ def geometry_growth(orbit,day,y,summary,out):
     for j,site in enumerate(orbit.sites):
         q=site_rotating(site)*orbit.cfg['length_unit_km']/1000
         ax3d.scatter(q[0],q[1],q[2],s=32,color=site_colors[j%len(site_colors)])
-
     handles=[
         Line2D([0],[0],color=BLUE,lw=2,label='Nominal NRHO'),
         Patch(facecolor='grey',edgecolor='grey',alpha=.55,label='Moon')
@@ -225,7 +225,8 @@ def geometry_growth(orbit,day,y,summary,out):
              title='Nominal NRHO and LSO locations')
     ax3d.set_box_aspect(np.maximum(np.ptp(xyz,axis=0),1.0))
     ax3d.view_init(elev=24,azim=-58)
-    fig.legend(handles=handles,loc='center left',bbox_to_anchor=(.835,.5),frameon=True,fontsize=11)
+    fig.legend(handles=handles,loc='center left',bbox_to_anchor=(.84,.74),
+               frameon=True,fontsize=11)
 
     for ax,sl,limit,label in [(axp,slice(0,3),10.,'Position departure [km]'),
                               (axv,slice(3,6),.1,'Velocity departure [m/s]')]:
@@ -240,8 +241,9 @@ def geometry_growth(orbit,day,y,summary,out):
         ax.legend(fontsize=10,loc='upper left')
     peakp=np.linalg.norm(y[:,:3],axis=1).max()
     peakv=np.linalg.norm(y[:,3:],axis=1).max()
+    fig.subplots_adjust(left=.07,right=.82,top=.96,bottom=.08)
     finish(fig,out,'07_geometry_long_uncontrolled',
-           'The 3D Moon-centred view locates the LSOs relative to the NRHO, while the adjacent panels show growth in the state departures.',
+           'The stand-alone 3D Moon-centred view locates the LSOs relative to the NRHO. Two departure panels beneath it show position and velocity growth.',
            f'By day {day[-1]:.1f}, peak departures reach {peakp:.3g} km and {peakv:.3g} m/s, with the declared stop condition recorded as “{summary["stop_reason"]}”.',
            layout_rect=(0,0,.82,1))
 
@@ -298,3 +300,26 @@ def controlled(orbit,trial,no_day,no_y,out):
     finish(fig,out,'10_lso_stationkeeping_corridor',
            'True departure norms evaluate the LSO-guided controller, and coloured impulse markers show the magnitudes and orbital phases it selected.',
            f'Peak position and velocity departures are {q["maximum_position_km"]:.3g} km and {q["maximum_velocity_m_s"]:.3g} m/s, so '+('both limits hold at all evaluated samples.' if q['all_evaluated_samples_inside'] and q['completed'] else 'this run does not establish satisfaction of both corridor limits over the requested span.'))
+
+
+def annual_delta_v(trial,out):
+    """Plot cumulative commanded impulse from the simulated closed-loop run."""
+    summary=trial['summary']
+    burn_day=np.asarray(trial['burn_day'])
+    commands=np.asarray(trial['commands']).reshape(-1,3)
+    increments=np.linalg.norm(commands,axis=1)
+    cumulative=np.cumsum(increments)
+    end=float(summary['last_day'])
+    x=np.r_[0.,burn_day,end] if len(burn_day) else np.array([0.,end])
+    y=np.r_[0.,cumulative,cumulative[-1]] if len(cumulative) else np.array([0.,0.])
+    fig,ax=plt.subplots(figsize=(12,6))
+    ax.step(x,y,where='post',color=BLUE,lw=2)
+    ax.scatter(burn_day,cumulative,s=20,color=BLUE,zorder=3)
+    ax.set(xlabel='Elapsed time [day]',ylabel='Cumulative commanded Δv [m/s]',
+           xlim=(0,max(end,1e-9)))
+    ax.grid(alpha=.25)
+    total=float(summary['total_commanded_delta_v_m_s'])
+    span='completed requested horizon' if summary['completed'] else 'simulated span before termination'
+    finish(fig,out,'11_cumulative_delta_v',
+           'The curve sums the magnitudes of commanded impulses over the simulated trajectory, so it reports accumulated Δv rather than a linearized yearly extrapolation.',
+           f'The {span} covers {end:.2f} days and accumulates {total:.4g} m/s of commanded Δv across {summary["burns"]} burns.')
