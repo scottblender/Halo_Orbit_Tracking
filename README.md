@@ -11,7 +11,7 @@ nominal orbit?
 | [02 — STM grey box](notebooks/02_stm_greybox_stationkeeping.ipynb) | Raw angular-innovation identification, held-out validation, gap-aware residual/stationarity tests, and LSO-guided station keeping, summarized in three figures |
 
 Each figure includes one purpose sentence and one result sentence computed from
-the current run. Orbit projections replace the overlapping 3-D axes. Conclusions
+the current run. Notebook 1 uses a 3D Moon-centred orbit view and places its legend outside the plotting axes. Conclusions
 distinguish the nonlinear autonomous CR3BP dynamics from their phase-dependent
 local STM and time-dependent observation geometry.
 
