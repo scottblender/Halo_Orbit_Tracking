@@ -9,7 +9,7 @@ jobs:
   export:
     if: github.event.head_commit.message == 'Refine LSO notebook writing and export verified execution'
     runs-on: ubuntu-latest
-    timeout-minutes: 61
+    timeout-minutes: 62
     env:
       OMP_NUM_THREADS: '1'
       OPENBLAS_NUM_THREADS: '1'
