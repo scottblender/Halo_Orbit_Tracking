@@ -13,11 +13,9 @@ from .surface_sensor import site_rotating
 BLUE, GREEN, RED = '#1414B4', '#0B9A0B', '#C00000'
 
 
-def finish(fig,out,name,purpose,result,layout_rect=None):
-    if layout_rect is None:
+def finish(fig, out, name, purpose, result, *, apply_layout=True):
+    if apply_layout:
         fig.tight_layout(pad=1.6)
-    else:
-        fig.tight_layout(pad=1.6,rect=layout_rect)
     Path(out).mkdir(parents=True,exist_ok=True)
     fig.savefig(Path(out)/(name+'.png'),dpi=150,bbox_inches='tight')
     plt.show()
@@ -25,60 +23,47 @@ def finish(fig,out,name,purpose,result,layout_rect=None):
     display(Markdown('**Purpose:** '+purpose+'\n\n**Result:** '+result))
 
 
-def diagram(orbit,out):
-    fig,ax=plt.subplots(figsize=(18,9))
-    ax.set(xlim=(0,18.5),ylim=(0,9))
+def diagram(orbit, out):
+    fig, ax = plt.subplots(figsize=(15, 6.5))
+    ax.set(xlim=(0, 15), ylim=(0, 6.5))
     ax.axis('off')
-    boxes=[
-        (1.5,5.7,2.4,1.3,'Input\n$u_k$: commanded $\\Delta v$ [m/s]','#eaf7ee'),
-        (4.7,5.7,3.0,1.3,'Plant\nnonlinear CR3BP\nactual burn $G u_k$, $G=\\operatorname{diag}(g)$','#edf1ff'),
-        (8.0,5.7,2.9,1.3,'State output\n$e_k=[\\delta r_k,\\delta v_k]$','#edf1ff'),
-        (11.1,5.7,3.0,1.3,'LSO sensor geometry\nideal angles $h_j(t_k,x_k)$','#edf1ff'),
-        (16.2,5.7,3.0,1.3,'Measured output\n$z_{j,k}=[\\alpha,\\delta]$\nvisible sites only','#fff3e8'),
-        (13.6,2.6,4.0,1.3,'State estimator\nperiodic STM, raw angle updates','#fff8dc'),
-        (7.8,2.6,3.8,1.3,'Station-keeping planner\nselects burn size and phase','#eaf7ee'),
-        (13.6,7.9,3.0,1.0,'Sensor noise\n$v_{j,k}\\sim\\mathcal{N}(0,R)$\n$R=\\sigma_\\theta^2 I_2$','#fff3e8')
-    ]
-    for x,y,w,h,label,color in boxes:
-        ax.add_patch(FancyBboxPatch((x-w/2,y-h/2),w,h,boxstyle='round,pad=0.08',
-                                    facecolor=color,edgecolor=BLUE,lw=1.7))
-        ax.text(x,y,label,ha='center',va='center',fontsize=12,fontweight='bold')
 
-    def arrow(start,end):
-        ax.annotate('',xy=end,xytext=start,
-                    arrowprops=dict(arrowstyle='->',lw=1.9,color=BLUE,shrinkA=2,shrinkB=2))
+    def box(x, y, width, label):
+        ax.add_patch(FancyBboxPatch((x, y - .45), width, .9,
+                                    boxstyle='round,pad=0.05', facecolor='#edf1ff',
+                                    edgecolor=BLUE, lw=1.5))
+        ax.text(x + width / 2, y, label, ha='center', va='center', fontsize=13)
 
-    arrow((2.72,5.7),(3.18,5.7))
-    arrow((6.22,5.7),(6.53,5.7))
-    arrow((9.45,5.7),(9.58,5.7))
-    arrow((12.62,5.7),(13.27,5.7))
-    ax.add_patch(Circle((13.6,5.7),.28,facecolor='white',edgecolor=BLUE,lw=1.8,zorder=4))
-    ax.text(13.6,5.7,'+',ha='center',va='center',fontsize=17,fontweight='bold',zorder=5)
-    arrow((13.6,7.38),(13.6,6.0))
-    ax.text(14.0,6.7,'added at sensor output',ha='left',va='center',fontsize=10,color='#333333')
-    arrow((13.92,5.7),(14.68,5.7))
+    def arrow(start, end):
+        ax.annotate('', xy=end, xytext=start,
+                    arrowprops=dict(arrowstyle='->', color=BLUE, lw=1.7))
 
-    arrow((16.0,5.02),(14.7,3.28))
-    ax.text(16.15,4.05,'raw visible angles',ha='left',va='center',fontsize=10,color='#333333')
-    arrow((11.58,2.6),(9.72,2.6))
-    ax.text(10.65,2.88,'estimated departure $\\hat e_k$',ha='center',va='bottom',fontsize=10,color='#333333')
-    ax.annotate('',xy=(1.5,3.25),xytext=(5.9,2.6),
-                arrowprops=dict(arrowstyle='->',lw=1.9,color=BLUE,
-                                connectionstyle='angle3,angleA=0,angleB=90'))
-    ax.annotate('',xy=(1.5,5.02),xytext=(1.5,3.25),
-                arrowprops=dict(arrowstyle='->',lw=1.9,color=BLUE))
-    ax.text(3.35,3.45,'planned command $u_{k+1}$',ha='center',va='bottom',fontsize=10,color='#333333')
+    box(2.7, 3.8, 2.6, 'Nonlinear CR3BP\nand actuator gains')
+    box(7.0, 3.8, 2.6, 'LSO line-of-sight\ngeometry')
+    box(11.0, 1.4, 2.7, 'Periodic STM\nstate estimator')
+    box(2.7, 1.4, 2.6, 'Station-keeping\nplanner')
+    ax.add_patch(Circle((11.3, 3.8), .21, facecolor='white', edgecolor=BLUE))
+    ax.text(11.3, 3.8, '+', ha='center', va='center', fontsize=15)
+    arrow((.65, 3.8), (2.65, 3.8))
+    arrow((5.35, 3.8), (6.95, 3.8))
+    arrow((9.65, 3.8), (11.09, 3.8))
+    arrow((11.3, 5.12), (11.3, 4.02))
+    arrow((11.51, 3.8), (13.45, 3.8))
+    ax.plot([13.45, 13.45], [3.8, 2.38], color=BLUE, lw=1.7)
+    arrow((13.45, 2.38), (13.45, 1.93))
+    arrow((10.95, 1.4), (5.35, 1.4))
+    ax.plot([.65, .65, 2.65], [3.8, 1.4, 1.4], color=BLUE, lw=1.7)
+    ax.text(1.55, 4.03, 'Commanded Δv', ha='center', fontsize=11)
+    ax.text(6.15, 4.03, 'State $x_k$', ha='center', fontsize=11)
+    ax.text(10.35, 4.03, 'Ideal angles', ha='center', fontsize=11)
+    ax.text(11.3, 5.26, 'Sensor noise', ha='center', fontsize=12)
+    ax.text(13.05, 4.03, 'Visible raw angles', ha='center', fontsize=11)
+    ax.text(8.15, 1.65, 'Estimated departure and orbital phase', ha='center', fontsize=11)
+    ax.text(1.5, 1.64, 'Planned impulse', ha='center', fontsize=11)
 
-    ax.text(9.2,1.25,
-            'Input: commanded impulse $u_k$. Physical state output: departure $e_k$. Identification output: visible raw LSO angles $z_{j,k}$.',
-            ha='center',va='center',fontsize=11)
-    ax.text(9.2,.72,
-            'Noise is added after the ideal angle calculation. Independent Gaussian white noise with $\\sigma_\\theta=1$ arcsec is a synthetic assumption, not hardware calibration.',
-            ha='center',va='center',fontsize=11)
-
-    finish(fig,out,'00_lso_feedback_diagram',
-           'This diagram separates the command input, physical state, angular measurement output and the point where sensor noise enters.',
-           f'The simulator adds independent angle noise to each visible LSO measurement after computing ideal line-of-sight angles. Its 1 arcsec white Gaussian model is explicit, but is not calibrated from real LSO data.')
+    finish(fig, out, '00_lso_feedback_diagram',
+           'The diagram follows the lecture convention of labeling the system inputs, outputs and disturbance path.',
+           f'The simulator adds {orbit.sigma_angle / ARCSEC:g} arcsec of independent Gaussian noise to the ideal angles and updates the estimator using visible measurements.')
 
 
 def inputs_outputs(orbit,rec,out):
@@ -195,11 +180,8 @@ def structure(d,out):
 def geometry_growth(orbit,day,y,summary,out):
     xyz=(orbit.reference(np.linspace(0,orbit.T,800,endpoint=False))[:3].T-
          np.array([1-orbit.cfg['mu'],0,0]))*orbit.cfg['length_unit_km']/1000
-    fig=plt.figure(figsize=(17,13))
-    gs=fig.add_gridspec(2,2,height_ratios=[1.7,1],wspace=.3,hspace=.34)
-    ax3d=fig.add_subplot(gs[0,:],projection='3d')
-    axp=fig.add_subplot(gs[1,0])
-    axv=fig.add_subplot(gs[1,1])
+    geometry = plt.figure(figsize=(11, 8))
+    ax3d = geometry.add_axes([.08, .10, .67, .82], projection='3d')
 
     ax3d.plot(xyz[:,0],xyz[:,1],xyz[:,2],color=BLUE,lw=2)
     radius=orbit.cfg['site']['radius_km']/1000
@@ -225,11 +207,18 @@ def geometry_growth(orbit,day,y,summary,out):
              title='Nominal NRHO and LSO locations')
     ax3d.set_box_aspect(np.maximum(np.ptp(xyz,axis=0),1.0))
     ax3d.view_init(elev=24,azim=-58)
-    fig.legend(handles=handles,loc='center left',bbox_to_anchor=(.84,.74),
-               frameon=True,fontsize=11)
+    geometry.legend(handles=handles, loc='center left', bbox_to_anchor=(.76, .55),
+                    frameon=True, fontsize=11)
+    finish(geometry, out, '07_nominal_geometry',
+           'The Moon-centred view shows the nominal NRHO and the locations of the lunar surface observatories.',
+           f'The {len(orbit.sites)} fixed sites view the spacecraft from different directions as it moves along the orbit.',
+           apply_layout=False)
 
-    for ax,sl,limit,label in [(axp,slice(0,3),10.,'Position departure [km]'),
-                              (axv,slice(3,6),.1,'Velocity departure [m/s]')]:
+    fig, (axp, axv) = plt.subplots(1, 2, figsize=(14, 5), sharex=True)
+    for ax,sl,limit,label in [
+        (axp, slice(0, 3), orbit.settings['position_limit_km'], 'Position departure [km]'),
+        (axv, slice(3, 6), orbit.settings['velocity_limit_m_s'], 'Velocity departure [m/s]'),
+    ]:
         value=np.linalg.norm(y[:,sl],axis=1)
         ax.semilogy(day,value,color=BLUE)
         ax.axhline(limit,color=RED,ls='--',label='Required limit')
@@ -241,9 +230,8 @@ def geometry_growth(orbit,day,y,summary,out):
         ax.legend(fontsize=10,loc='upper left')
     peakp=np.linalg.norm(y[:,:3],axis=1).max()
     peakv=np.linalg.norm(y[:,3:],axis=1).max()
-    fig.subplots_adjust(left=.07,right=.82,top=.96,bottom=.08)
-    finish(fig,out,'07_geometry_long_uncontrolled',
-           'The stand-alone 3D Moon-centred view locates the LSOs relative to the NRHO. Two departure panels beneath it show position and velocity growth.',
+    finish(fig,out,'07_uncontrolled_departure',
+           'The two panels compare uncontrolled position and velocity departures with the specified limits.',
            f'By day {day[-1]:.1f}, peak departures reach {peakp:.3g} km and {peakv:.3g} m/s, with the declared stop condition recorded as “{summary["stop_reason"]}”.',
            layout_rect=(0,0,.82,1))
 
@@ -285,8 +273,10 @@ def residuals(report,out):
 def controlled(orbit,trial,no_day,no_y,out):
     fig,axs=plt.subplots(3,1,figsize=(13,12),sharex=True)
     end=trial['day'][-1];use=no_day<=end
-    for ax,sl,limit,label in [(axs[0],slice(0,3),10.,'Position departure [km]'),
-                              (axs[1],slice(3,6),.1,'Velocity departure [m/s]')]:
+    for ax,sl,limit,label in [
+        (axs[0], slice(0, 3), orbit.settings['position_limit_km'], 'Position departure [km]'),
+        (axs[1], slice(3, 6), orbit.settings['velocity_limit_m_s'], 'Velocity departure [m/s]'),
+    ]:
         ax.semilogy(no_day[use],np.linalg.norm(no_y[use,sl],axis=1),color=RED,label='Uncontrolled')
         ax.semilogy(trial['day'],np.linalg.norm(trial['output'][:,sl],axis=1),color=BLUE,label='LSO-guided station keeping')
         ax.axhline(limit,color='black',ls='--',label='Required limit')

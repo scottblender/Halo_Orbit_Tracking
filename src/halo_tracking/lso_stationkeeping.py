@@ -247,10 +247,15 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
         count = s['stationkeeping_periods']*orbit.n
         requested_days = count*orbit.dt_s/86400
     else:
-        if duration_days <= 0:
-            raise ValueError('duration_days must be positive')
-        count = int(np.ceil(duration_days*86400/orbit.dt_s))
+        if not np.isfinite(duration_days) or duration_days <= 0:
+            raise ValueError('duration_days must be finite and positive')
         requested_days = float(duration_days)
+        full_steps = requested_days * 86400 / orbit.dt_s
+        nearest_step = round(full_steps)
+        count = (nearest_step if np.isclose(full_steps, nearest_step, rtol=0, atol=1e-11)
+                 else int(np.ceil(full_steps)))
+    requested_end = requested_days * 86400 / orbit.cfg['time_unit_s']
+    ends_on_grid = np.isclose(requested_end, count * orbit.dt, rtol=0, atol=1e-12)
     if planning_stride_steps < 1:
         raise ValueError('planning_stride_steps must be at least 1')
     state = orbit.state(np.array([.03,-.02,.01,.0003,-.0002,.0001]), 0.)
@@ -258,7 +263,7 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
     outputs, days = [orbit.output(state, 0.)], [0.]
     burn_day, commands, phases, nav, raw, visibility, covariance = [], [], [], [], [], [], []
     pending, scheduled, stop_reason = None, None, 'completed requested propagation'
-    for k in range(count+1):
+    for k in range(count + int(ends_on_grid)):
         t = k*orbit.dt
         obs = observations(np.array([t]), state[None,:], orbit.cfg, seed+100000+k)
         measured, mask = obs['measured_angles_rad'][0], obs['sensor_visible'][0]
@@ -287,7 +292,11 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
             command, pending = pending, None
             burn_day.append(t*orbit.cfg['time_unit_s']/86400)
             commands.append(command.copy()); phases.append((k % orbit.n)*360/orbit.n)
-        state, tt, xx = orbit.step(state,k,command,s['simulated_actuator_gains'],s['nonlinear_samples_per_step'])
+        end_time = requested_end if k == count - 1 and not ends_on_grid else None
+        state, tt, xx = orbit.step(
+            state, k, command, s['simulated_actuator_gains'],
+            s['nonlinear_samples_per_step'], end_time=end_time,
+        )
         outputs.extend(orbit.output(x,epoch) for x,epoch in zip(xx,tt))
         days.extend(tt*orbit.cfg['time_unit_s']/86400)
         A, B = orbit.A[k % orbit.n], orbit.B[k % orbit.n]
@@ -298,8 +307,10 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
     pos, vel = np.linalg.norm(y[:,:3],axis=1),np.linalg.norm(y[:,3:],axis=1)
     outside = (pos>s['position_limit_km']) | (vel>s['velocity_limit_m_s'])
     total_delta_v=float(sum(np.linalg.norm(u) for u in commands))
-    completed=len(nav)==count+1
-    annual_requested=np.isclose(requested_days,365.25,atol=1e-6)
+    completed = bool(np.isclose(day[-1], requested_days, rtol=0, atol=1e-9))
+    annual_horizon = s.get('annual_horizon_days')
+    annual_requested = (annual_horizon is not None and
+                        np.isclose(requested_days, annual_horizon, rtol=0, atol=1e-9))
     summary = dict(seed=seed, measurement_source='lso_angles',
                    requested_duration_days=requested_days,
                    planning_stride_steps=int(planning_stride_steps),

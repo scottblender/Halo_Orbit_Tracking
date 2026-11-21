@@ -35,11 +35,33 @@ assert figures, 'No saved figures found'
 assert all(path.stat().st_size > 0 for path in figures), 'A saved figure is empty'
 print('Saved figures:', len(figures))
 
-summary_path = OUT / 'closed_loop_summary.json'
-if summary_path.exists():
-    summary = json.loads(summary_path.read_text())
-    for key, value in summary.items():
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            assert np.isfinite(value), f'{key} is not finite'
-    print('Closed-loop summary loaded. Cumulative commanded delta-v:',
-          summary.get('annual_delta_v_m_s', summary.get('total_commanded_delta_v_m_s')))
+summary = json.loads((OUT / 'closed_loop_summary.json').read_text(encoding='utf-8'))
+for key, value in summary.items():
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        assert np.isfinite(value), f'{key} is not finite'
+
+with np.load(OUT / 'closed_loop.npz') as trial:
+    days = trial['day']
+    burn_days = trial['burn_day']
+    commands = trial['commands']
+    assert days.ndim == 1 and days.size, 'No propagated epochs'
+    assert np.isfinite(days).all() and np.all(np.diff(days) >= 0), 'Invalid propagation epochs'
+    assert np.isfinite(trial['output']).all(), 'Nonfinite propagated state'
+    assert trial['output'].shape == (days.size, 6), 'State history does not match epochs'
+    assert commands.shape == (burn_days.size, 3), 'Impulse history does not match burn epochs'
+    assert np.isfinite(commands).all(), 'Nonfinite commanded impulse'
+    assert np.all((burn_days >= days[0]) & (burn_days <= days[-1])), 'Burn outside propagation'
+    total = np.linalg.norm(commands, axis=1).sum()
+
+assert np.isclose(days[-1], summary['last_day']), 'Summary and history end on different days'
+assert commands.shape[0] == summary['burns'], 'Summary and history disagree on burn count'
+assert np.isclose(total, summary['total_commanded_delta_v_m_s']), 'Inconsistent cumulative delta-v'
+if summary['completed']:
+    assert np.isclose(days[-1], summary['requested_duration_days'], rtol=0, atol=1e-8), (
+        'Completed propagation ended outside the requested horizon'
+    )
+annual = summary.get('annual_delta_v_m_s')
+if annual is not None:
+    assert summary['completed'], 'Incomplete propagation cannot report annual delta-v'
+    assert np.isclose(annual, total), 'Annual and cumulative delta-v disagree'
+print(f'Closed-loop propagation completed: {summary["completed"]}. Commanded delta-v: {total:.6g} m/s')

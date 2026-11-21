@@ -63,3 +63,25 @@ def test_gap_diagnostics_do_not_compress_time():
     assert q['eligible_whiteness_tests']==0
     assert q['contiguous_lengths'].max()<24
     assert len(longest_run(np.r_[np.ones(4),np.nan,np.ones(7)]))==7
+
+
+def test_annual_trial_stops_at_requested_horizon_off_the_measurement_grid(orbit, monkeypatch):
+    sample_days = orbit.dt_s / 86400
+    duration = 2.5 * sample_days
+    monkeypatch.setitem(orbit.settings, 'annual_horizon_days', duration)
+    command = np.array([0.003, 0.004, 0.0])
+    monkeypatch.setattr(lso.physics, 'plan_burn',
+                        lambda *args: {'delay': 0, 'command': command})
+
+    trial = lso.stationkeeping_trial(orbit, np.ones(3), duration_days=duration)
+
+    assert trial['summary']['completed']
+    assert trial['day'][-1] == pytest.approx(duration)
+    assert np.all(trial['day'] <= duration + 1e-12)
+    assert len(trial['angles']) == 3
+    assert trial['summary']['annual_delta_v_m_s'] == pytest.approx(0.015)
+
+    monkeypatch.setitem(orbit.settings, 'uncontrolled_stop_km', 0.0)
+    truncated = lso.stationkeeping_trial(orbit, np.ones(3), duration_days=duration)
+    assert not truncated['summary']['completed']
+    assert truncated['summary']['annual_delta_v_m_s'] is None

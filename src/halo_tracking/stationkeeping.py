@@ -85,14 +85,15 @@ class OrbitModel:
     def state(self, output, t):
         return self.reference(t) + np.linalg.solve(self.S, output)
 
-    def step(self, state, k, command, gains=None, substeps=1):
+    def step(self, state, k, command, gains=None, substeps=1, *, end_time=None):
         """Nonlinear plant, with a recorded pre/post impulse discontinuity."""
         gains = np.ones(3) if gains is None else np.asarray(gains)
         start = k*self.dt
         after = np.asarray(state).copy()
         after[3:] += (gains*np.asarray(command)*self.cfg['time_unit_s'] /
                       (1000*self.cfg['length_unit_km']))
-        times = np.linspace(start, start+self.dt, substeps+1)
+        end = start + self.dt if end_time is None else end_time
+        times = np.linspace(start, end, substeps+1)
         states = propagate(after, times, self.cfg['mu'])
         return states[-1], times, states
 
