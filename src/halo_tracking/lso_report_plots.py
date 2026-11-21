@@ -232,8 +232,7 @@ def geometry_growth(orbit,day,y,summary,out):
     peakv=np.linalg.norm(y[:,3:],axis=1).max()
     finish(fig,out,'07_uncontrolled_departure',
            'The two panels compare uncontrolled position and velocity departures with the specified limits.',
-           f'By day {day[-1]:.1f}, peak departures reach {peakp:.3g} km and {peakv:.3g} m/s, with the declared stop condition recorded as “{summary["stop_reason"]}”.',
-           layout_rect=(0,0,.82,1))
+           f'By day {day[-1]:.1f}, peak departures reach {peakp:.3g} km and {peakv:.3g} m/s, with the declared stop condition recorded as “{summary["stop_reason"]}”.')
 
 
 def validation(orbit,rec,pred,free,out):

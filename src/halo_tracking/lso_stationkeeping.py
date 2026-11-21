@@ -252,7 +252,8 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
         requested_days = float(duration_days)
         full_steps = requested_days * 86400 / orbit.dt_s
         nearest_step = round(full_steps)
-        count = (nearest_step if np.isclose(full_steps, nearest_step, rtol=0, atol=1e-11)
+        count = (nearest_step if nearest_step > 0 and
+                 np.isclose(full_steps, nearest_step, rtol=0, atol=1e-11)
                  else int(np.ceil(full_steps)))
     requested_end = requested_days * 86400 / orbit.cfg['time_unit_s']
     ends_on_grid = np.isclose(requested_end, count * orbit.dt, rtol=0, atol=1e-12)
