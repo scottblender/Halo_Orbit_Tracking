@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths: [.github/workflows/export-executed-notebooks.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
   export:
     if: github.event.head_commit.message == 'Refine LSO notebook writing and export verified execution'
@@ -26,16 +26,14 @@ jobs:
           python scripts/build_stationkeeping_notebooks.py
           python scripts/check_notebooks.py --in-process
           python scripts/validate_stationkeeping_results.py
-      - name: Export notebook bytes for a manual GitHub update
+      - name: Commit verified notebook outputs to main
         run: |
-          python - <<'PY'
-          import hashlib, json
-          from pathlib import Path
-          for name in ['01_stationkeeping_identification.ipynb','02_stm_greybox_stationkeeping.ipynb']:
-              payload=json.dumps(json.loads((Path('notebooks')/name).read_text()),ensure_ascii=True,separators=(',',':'))
-              count=(len(payload)+5999)//6000
-              print('NB_BEGIN|'+name+'|'+str(len(payload))+'|'+str(count)+'|'+hashlib.sha256(payload.encode()).hexdigest(),flush=True)
-              for index,start in enumerate(range(0,len(payload),6000)):
-                  print('NB_CHUNK|'+name+'|'+str(index)+'|'+payload[start:start+6000],flush=True)
-              print('NB_END|'+name,flush=True)
-          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add notebooks/01_stationkeeping_identification.ipynb notebooks/02_stm_greybox_stationkeeping.ipynb
+          if git diff --cached --quiet; then
+            echo "The verified notebooks are already current."
+          else
+            git commit -m "Save verified LSO notebook outputs"
+            git push origin HEAD:main
+          fi
