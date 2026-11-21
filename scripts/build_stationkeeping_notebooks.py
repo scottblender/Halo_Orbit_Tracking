@@ -52,7 +52,9 @@ plots.inputs_outputs(orbit,training,OUT/'figures')
 ('md', r'''
 ## What is actually measured?
 
-The LSO channels are inertial-axis angles $\alpha$ and $\delta$. Elevation, range and configured Sun/Earth exclusions determine availability. Missing angles remain blank, while a finite state estimate during an outage is a model prediction, not a new measurement. The block diagram separates this measurement path from the station-keeping feedback.
+The commanded input is the impulse $u_k$ in m/s. The physical state output is the departure $e_k=[\delta r_k,\delta v_k]$. The measured output used for identification is the pair of inertial-axis angles $z_{j,k}=[\alpha,\delta]$ from each visible LSO. For a visible site, $z_{j,k}=h_j(t_k,x_k)+v_{j,k}$, where $h_j$ is the ideal nonlinear line-of-sight measurement.
+
+The simulator injects $v_{j,k}$ additively at the sensor output, after computing $h_j$ and before the visibility mask. Each angle component has independent zero-mean Gaussian noise with $\sigma_\theta=1$ arcsec, so $R=\sigma_\theta^2 I_2$ and the assumed measurement noise is white across epochs and sites. This is a synthetic sensor-noise assumption. There are no real LSO calibration residuals here to establish that an actual instrument has white or Gaussian noise. Bias and colored noise are not modeled. The innovation tests check consistency of this assumed model with the simulation, not real sensor hardware. Missing angles are caused by visibility, not by the noise model.
 '''),
 ('code', '''
 plots.lso_measurements(orbit,training,OUT/'figures')
@@ -91,7 +93,7 @@ np.savez_compressed(OUT/'structure_diagnostics.npz',**diagnostics)
 ('md', r'''
 ## Longer propagation shows uncontrolled growth
 
-Propagate the same small initial departure continuously for **up to 24 orbits**, stopping at a declared 20,000 km departure cutoff or integration failure. Only the reference repeats. The spacecraft is never reset. Orthographic orbit projections replace the overlapping 3-D axes, alongside position and velocity growth panels.
+Propagate the same small initial departure continuously for **up to 24 orbits**, stopping at a declared 20,000 km departure cutoff or integration failure. Only the reference repeats. The spacecraft is never reset. A 3D Moon-centred orbit view shows the reference path, Moon and LSO locations. Its legend sits outside the plotting axes, alongside position and velocity growth panels.
 '''),
 ('code', '''
 no_day,no_y,no_summary=sk.uncontrolled(orbit)
@@ -126,7 +128,7 @@ The six states are position and velocity departure from the nominal NRHO. In cor
 $$e_{k+1}=A_k e_k+B_k\operatorname{diag}(g)u_k+w_k,\qquad z_{j,k}=h_j(t_k,x_{\rm nom}(t_k))+C_{j,k}e_k+v_{j,k},$$
 $$\dot\Phi=F(t)\Phi,\quad A_k=J^{-1}\Phi(t_{k+1},t_k)J,\quad C_{j,k}=\left.\frac{\partial h_j}{\partial x}\right|_{x_{\rm nom}(t_k)}J.$$
 
-$z_{j,k}$ contains the two angles from visible LSO $j$, so **$C_{j,k}$ is not the identity**. Known physics fixes the STM. Training estimates three actuator gains $g$. This is a locally linear, phase-dependent model of the nonlinear orbit/angle system.
+$z_{j,k}$ contains the two angles from visible LSO $j$, so **$C_{j,k}$ is not the identity**. The measurement noise enters additively after the ideal angle map: $v_{j,k}\sim\mathcal{N}(0,R)$ with $R=\sigma_\theta^2 I_2$ and $\sigma_\theta=1$ arcsec in the synthetic sensor generator. Draws are independent across angle components, sites and epochs, which is a white-noise assumption. No real sensor calibration data are used to justify white or Gaussian noise, and bias or colored noise are not modeled. The innovation tests check this assumption against the synthetic data. Known physics fixes the STM. Training estimates three actuator gains $g$. This is a locally linear, phase-dependent model of the nonlinear orbit/angle system.
 '''),
 ('code', SETUP+'''
 orbit,data=sk.restore_study(ROOT,OUT/'data')
