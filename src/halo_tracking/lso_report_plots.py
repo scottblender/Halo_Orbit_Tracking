@@ -31,7 +31,7 @@ def diagram(orbit,out):
     ax.axis('off')
     boxes=[
         (1.5,5.7,2.4,1.3,'Input\n$u_k$: commanded $\\Delta v$ [m/s]','#eaf7ee'),
-        (4.7,5.7,3.0,1.3,'Plant\nnonlinear CR3BP\nactual burn $G u_k$','#edf1ff'),
+        (4.7,5.7,3.0,1.3,'Plant\nnonlinear CR3BP\nactual burn $G u_k$, $G=\\operatorname{diag}(g)$','#edf1ff'),
         (8.0,5.7,2.9,1.3,'State output\n$e_k=[\\delta r_k,\\delta v_k]$','#edf1ff'),
         (11.1,5.7,3.0,1.3,'LSO sensor geometry\nideal angles $h_j(t_k,x_k)$','#edf1ff'),
         (16.2,5.7,3.0,1.3,'Measured output\n$z_{j,k}=[\\alpha,\\delta]$\nvisible sites only','#fff3e8'),
