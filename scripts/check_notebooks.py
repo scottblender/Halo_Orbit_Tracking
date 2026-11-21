@@ -54,7 +54,7 @@ def execute_in_process(path, start_cell=0):
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--in-process',action='store_true',help='Use isolated IPython processes when kernel sockets are unavailable')
-    parser.add_argument('--one',type=Path,help="Execute just this notebook (default: Notebook 01 only)")
+    parser.add_argument('--one',type=Path,help="Execute just this notebook (default: both station-keeping notebooks)")
     parser.add_argument('--from-cell',type=int,default=0,help='Start at this zero-based cell in --one, preserving earlier outputs')
     args=parser.parse_args()
     if args.from_cell and not args.one:
@@ -62,7 +62,8 @@ if __name__=='__main__':
     if args.one:
         execute_in_process(args.one,args.from_cell)
     else:
-        paths=[root/'notebooks'/'01_narx_results.ipynb']
+        paths=[root/'notebooks'/'01_stationkeeping_identification.ipynb',
+               root/'notebooks'/'02_stm_greybox_stationkeeping.ipynb']
         for path in paths:
             if args.in_process:
                 subprocess.run([sys.executable,__file__,'--one',str(path)],cwd=root,check=True)
@@ -72,3 +73,4 @@ if __name__=='__main__':
                 NotebookClient(notebook,timeout=600,kernel_name='python3',resources={'metadata':{'path':str(root)}}).execute()
                 nbformat.write(notebook,path)
                 print('Executed in fresh kernel:',path.name,flush=True)
+
