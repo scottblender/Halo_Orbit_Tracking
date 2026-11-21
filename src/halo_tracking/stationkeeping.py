@@ -330,7 +330,8 @@ def plan_burn(orbit, estimate, k, gains):
         path = [estimate]
         for j in range(horizon):
             u = command if j == delay else np.zeros(3)
-            state, tt, xx = orbit.step(state, k+j, u, gains, substeps=2)
+            state, tt, xx = orbit.step(state, k+j, u, gains,
+                                       substeps=s['nonlinear_samples_per_step'])
             path.extend(orbit.output(x, t) for x,t in zip(xx, tt))
         path = np.asarray(path)
         ratios = np.c_[np.linalg.norm(path[:, :3], axis=1)/limits[0],

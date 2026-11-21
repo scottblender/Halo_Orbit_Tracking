@@ -90,6 +90,7 @@ grid are declared before evaluation. A pending delayed burn prevents duplicate
 scheduling. Performance uses nonlinear **truth**, distinct from the noisy state
 estimate used for guidance.
 
+Candidate planning and final evaluation use the same coast sampling density.
 Both pre/post impulse states and coast substeps are checked against norm limits;
 an impulse cannot repair an existing position violation instantaneously. The
 summary reports observed maxima and the first violation instead of declaring

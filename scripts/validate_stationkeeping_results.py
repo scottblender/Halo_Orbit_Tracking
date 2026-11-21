@@ -27,6 +27,12 @@ fit=json.loads((OUT/'greybox_fit.json').read_text())
 assert np.isfinite(fit['gains']).all()
 print('Estimated actuator gains:',fit['gains'])
 print('Prediction scores:',(OUT/'prediction_scores.json').read_text())
+with np.load(OUT/'residual_checks.npz') as checks:
+    print('Ljung-Box rejections after Holm by output channel:',
+          (checks['ljung_box_holm_p']<.05).sum(axis=0).tolist())
+    print('Residual-input CCF rejections after Holm:',
+          int((checks['ccf_holm_p']<.05).sum()))
+    print('Standardized innovation mean:',checks['standardized_mean'].tolist())
 summary=json.loads((OUT/'closed_loop_summary.json').read_text())
 print('Observed nonlinear corridor result:',json.dumps(summary,indent=2))
 assert np.isfinite(summary['maximum_position_km'])
