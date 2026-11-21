@@ -1,39 +1,39 @@
-name: Scientific checks
+name: Station-keeping scientific checks
 on: [push, pull_request]
 jobs:
-  test:
+  stationkeeping:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
     permissions:
       contents: read
+    env:
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MPLBACKEND: Agg
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m pip install -e ".[dev,neural-narx]"
-      - run: python -m pytest
-      - name: Execute Notebook 01 only; preserve Notebook 00 byte for byte
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: Scientific regression tests
+        run: >-
+          python -m pytest -q tests/test_stationkeeping.py
+          tests/test_reference_correction.py tests/test_stability.py
+          tests/test_scientific_models.py
+      - name: Execute both station-keeping notebooks
         run: python scripts/check_notebooks.py --in-process
-        env:
-          OMP_NUM_THREADS: '1'
-          OPENBLAS_NUM_THREADS: '1'
-      - name: Verify Notebook 01 execution did not change Notebook 00
-        run: git diff --exit-code -- notebooks/00_gateway_tracking_comparison.ipynb
-      - name: Execute the full-year STM ending of Notebook 00
-        run: python scripts/check_notebooks.py --one notebooks/00_gateway_tracking_comparison.ipynb --from-cell 26
-        env:
-          OMP_NUM_THREADS: '1'
-          OPENBLAS_NUM_THREADS: '1'
-      - name: Archive executed experiment and plots
+      - name: Validate executed notebooks and saved results
+        run: python scripts/validate_stationkeeping_results.py
+      - name: Archive executed notebooks and numerical results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: executed-neural-narx-experiment
+          name: stationkeeping-executed-notebooks-and-results
           path: |
-            notebooks/00_gateway_tracking_comparison.ipynb
-            notebooks/01_narx_results.ipynb
-            artifacts/narx_stm_comparison/
-            artifacts/stm_baseline/
+            notebooks/01_stationkeeping_identification.ipynb
+            notebooks/02_stm_greybox_stationkeeping.ipynb
+            artifacts/stationkeeping/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
