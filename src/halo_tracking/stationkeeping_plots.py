@@ -102,6 +102,15 @@ def frf(spec, output, model_spec=None):
             ax.set(title=NAMES[i], ylabel='Wrapped phase [deg]', xlabel='Frequency [cycle/day]')
         axs[0,0].legend()
         finish(fig,output,'05_frf_phase')
+    else:
+        fig, axs = plt.subplots(2,3,figsize=(18,8),sharex=True)
+        for i,ax in enumerate(axs.flat):
+            c=i%3
+            ax.plot(f[1:],np.angle(spec['H'][1:,i,c],deg=True),color=BLUE,label='Empirical')
+            ax.plot(f[1:],np.angle(model_spec['H'][1:,i,c],deg=True),'--',color=GREEN,label='Grey box')
+            ax.set(title='Δv '+'xyz'[c]+' → '+NAMES[i],ylabel='Wrapped phase [deg]',xlabel='Frequency [cycle/day]')
+        axs[0,0].legend()
+        finish(fig,output,'05b_frf_phase_comparison')
 
 
 def stationarity_panels(rec, orbit, output, prefix='06_stationarity'):

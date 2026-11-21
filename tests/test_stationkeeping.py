@@ -72,7 +72,13 @@ def test_mimo_welch_recovers_cross_axis_gain_and_delay():
     y[:,1:]=u[:,:-1]@mapping.T
     spec=welch_bundle(u,y,1.,128)
     expected=np.exp(-2j*np.pi*spec['f'])[:,None,None]*mapping
-    np.testing.assert_allclose(spec['H'][1:-1],expected[1:-1],atol=.025)
+    # Segment mean removal/window leakage biases the first nonzero bin of a
+    # delay. Test the resolved interior, and check zero-delay cross-axis mixing
+    # separately to machine precision, including the low-frequency bins.
+    np.testing.assert_allclose(spec['H'][2:-1],expected[2:-1],atol=.025)
+    instantaneous=welch_bundle(u,u@mapping.T,1.,128)
+    np.testing.assert_allclose(instantaneous['H'],
+                               np.broadcast_to(mapping,instantaneous['H'].shape),atol=1e-12)
     assert spec['nonoverlap_segments']==160
     assert spec['dof']==320
 
