@@ -320,6 +320,10 @@ def annual_delta_v(trial,out):
     ax.grid(alpha=.25)
     total=float(summary['total_commanded_delta_v_m_s'])
     span='completed requested horizon' if summary['completed'] else 'simulated span before termination'
+    result=f'The {span} covers {end:.2f} days and accumulates {total:.4g} m/s of commanded Δv across {summary["burns"]} burns.'
+    if not summary['all_evaluated_samples_inside']:
+        exit_day=summary['first_sampled_exit_day']
+        result+=f' The path leaves the required corridor at day {exit_day:.2f}, so this simulated total is not a feasible annual station-keeping budget.'
     finish(fig,out,'11_cumulative_delta_v',
            'The curve sums the magnitudes of commanded impulses over the simulated trajectory, so it reports accumulated Δv rather than a linearized yearly extrapolation.',
-           f'The {span} covers {end:.2f} days and accumulates {total:.4g} m/s of commanded Δv across {summary["burns"]} burns.')
+           result)
