@@ -38,21 +38,21 @@ INTRO = [
 
 **Question:** Can an LSO-informed, phase-dependent model choose the impulse magnitude and orbital phase needed to keep a spacecraft within **10 km** in position and **0.1 m/s** in velocity of its nominal NRHO?
 
-An NRHO is a repeating path near the Moon; an impulse is a short velocity change that corrects departure from that path. Three **lunar surface observatories (LSOs)** measure line-of-sight angles, not position or velocity directly. Their noisy angles and actual visibility gaps feed a state estimator; simulation truth is reserved for generating sensors and evaluating accuracy.
+An NRHO is a repeating path near the Moon. An impulse is a short velocity change that corrects departure from that path. Three **lunar surface observatories (LSOs)** measure line-of-sight angles, not position or velocity directly. Their noisy angles and actual visibility gaps feed a state estimator. Simulation truth is reserved for generating sensors and evaluating accuracy.
 
-Inputs are commanded impulses in three directions; reconstructed outputs are position and inertial-velocity departures resolved along rotating Earth–Moon axes. Phase means time through the orbit in degrees, not a geometric angle. Measurements at epoch $k$ precede impulse $u_k$, which affects the next state.
+Inputs are commanded impulses in three directions. Reconstructed outputs are position and inertial-velocity departures resolved along rotating Earth–Moon axes. Phase means time through the orbit in degrees, not a geometric angle. Measurements at epoch $k$ precede impulse $u_k$, which affects the next state.
 '''),
 ('code', SETUP+'''
 orbit,data=sk.prepare_study(ROOT,OUT/'data')
 training=data['training']
 table(['Split','Independent trajectories','Seed range'],[(n,len(r.seeds),f'{r.seeds[0]}–{r.seeds[-1]}') for n,r in data.items()])
-print(f'LSO angle noise: {orbit.cfg["measurement"]["angle_sigma_arcsec"]:g} arcsec; uniform cadence: {orbit.dt_s/3600:.2f} hour.')
+print(f'LSO angle noise: {orbit.cfg["measurement"]["angle_sigma_arcsec"]:g} arcsec. Uniform cadence: {orbit.dt_s/3600:.2f} hour.')
 plots.inputs_outputs(orbit,training,OUT/'figures')
 '''),
 ('md', r'''
 ## What is actually measured?
 
-The LSO channels are inertial-axis angles $\alpha$ and $\delta$. Elevation, range and configured Sun/Earth exclusions determine availability; missing angles remain blank, while a finite state estimate during an outage is a model prediction, not a new measurement. The block diagram separates this measurement path from the station-keeping feedback.
+The LSO channels are inertial-axis angles $\alpha$ and $\delta$. Elevation, range and configured Sun/Earth exclusions determine availability. Missing angles remain blank, while a finite state estimate during an outage is a model prediction, not a new measurement. The block diagram separates this measurement path from the station-keeping feedback.
 '''),
 ('code', '''
 plots.lso_measurements(orbit,training,OUT/'figures')
@@ -61,9 +61,9 @@ plots.diagram(orbit,OUT/'figures')
 ('md', r'''
 ## Welch spectra and empirical response
 
-Following Studios 7–8, use Hann windows and 50% overlap, averaging within separate trajectories. The full MIMO estimate is $\hat H=\hat S_{yu}\hat S_{uu}^{-1}$ with cross-spectrum $Y U^*$; the displayed channels are its three direct position responses. Because $y$ is an **LSO-derived state estimate**, its response includes estimator dynamics and is not the physical plant transfer function alone.
+Following Studios 7–8, use Hann windows and 50% overlap, averaging within separate trajectories. The full MIMO estimate is $\hat H=\hat S_{yu}\hat S_{uu}^{-1}$ with cross-spectrum $Y U^*$. The displayed channels are its three direct position responses. Because $y$ is an **LSO-derived state estimate**, its response includes estimator dynamics and is not the physical plant transfer function alone.
 
-Compare window lengths before interpreting peaks: quarter-orbit windows cannot resolve the orbital fundamental, while full-orbit windows leave one window per trajectory. These are finite-record summaries; a stationary output spectrum or global LTI transfer function is not assumed.
+Compare window lengths before interpreting peaks: quarter-orbit windows cannot resolve the orbital fundamental, while full-orbit windows leave one window per trajectory. These are finite-record summaries. A stationary output spectrum or global LTI transfer function is not assumed.
 '''),
 ('code', '''
 s=orbit.settings
@@ -75,7 +75,7 @@ plots.frf(spec,OUT/'figures')
 ('md', r'''
 ## Stationarity and model structure
 
-Studio 6 compares segment means/variances and pairs ADF (unit-root null) with KPSS (level-stationarity null). Here the reconstructed states include estimator dynamics; angular gaps are never filled to manufacture measurements. The phase/linearity/Floquet plots then test whether a local time-invariant approximation is credible and whether perturbations grow over an orbit.
+Studio 6 compares segment means/variances and pairs ADF (unit-root null) with KPSS (level-stationarity null). Here the reconstructed states include estimator dynamics. Angular gaps are never filled to manufacture measurements. The phase/linearity/Floquet plots then test whether a local time-invariant approximation is credible and whether perturbations grow over an orbit.
 '''),
 ('code', '''
 names=['r x','r y','r z','v x','v y','v z']
@@ -91,7 +91,7 @@ np.savez_compressed(OUT/'structure_diagnostics.npz',**diagnostics)
 ('md', r'''
 ## Longer propagation shows uncontrolled growth
 
-Propagate the same small initial departure continuously for **up to 24 orbits**, stopping at a declared 20,000 km departure cutoff or integration failure. Only the reference repeats; the spacecraft is never reset. Orthographic orbit projections replace the overlapping 3-D axes, alongside position and velocity growth panels.
+Propagate the same small initial departure continuously for **up to 24 orbits**, stopping at a declared 20,000 km departure cutoff or integration failure. Only the reference repeats. The spacecraft is never reset. Orthographic orbit projections replace the overlapping 3-D axes, alongside position and velocity growth panels.
 '''),
 ('code', '''
 no_day,no_y,no_summary=sk.uncontrolled(orbit)
@@ -102,9 +102,11 @@ np.savez_compressed(OUT/'uncontrolled.npz',day=no_day,output=no_y)
 ('md', r'''
 ## What does this analysis establish?
 
-The measured station-keeping system is **nonlinear** because inverse-distance gravitational forces and line-of-sight angles depend nonlinearly on the state. Its departure/measurement model is **time varying** because the nominal orbit traverses changing geometry and LSO availability changes with visibility. The ideal CR3BP vector field itself is autonomous in rotating coordinates; its linearization along a moving reference is not time invariant.
+From this analysis, the NRHO station-keeping system requires a **nonlinear, time-varying model**. The gravitational forces and LSO line-of-sight angles depend nonlinearly on the spacecraft state. The departure dynamics and measurement geometry also change with orbital phase and LSO visibility.
 
-The local STM model is therefore **linear time periodic**, with a time-dependent LSO observation map and visibility mask. The next notebook starts with this physics-informed grey box; NARX is deferred. A short-record stationarity test does not remove phase dependence or establish global LTI behavior.
+The physical CR3BP dynamics are autonomous in rotating coordinates, meaning the gravitational model does not explicitly depend on time. However, the STM is evaluated along the moving nominal orbit, so its coefficients change with orbital phase. Thus, small departures can be described by a **linear time-periodic STM**, with further changes in the measurement equation when LSOs enter or leave view.
+
+Thus, the STM provides a starting point for local grey-box identification. A short-record stationarity test does not remove the measured phase dependence or establish global LTI behavior. NARX remains deferred.
 '''),
 ('code', '''
 response=np.linalg.norm(diagnostics['impulse_sensitivity'],axis=(1,2))
@@ -124,7 +126,7 @@ The six states are position and velocity departure from the nominal NRHO. In cor
 $$e_{k+1}=A_k e_k+B_k\operatorname{diag}(g)u_k+w_k,\qquad z_{j,k}=h_j(t_k,x_{\rm nom}(t_k))+C_{j,k}e_k+v_{j,k},$$
 $$\dot\Phi=F(t)\Phi,\quad A_k=J^{-1}\Phi(t_{k+1},t_k)J,\quad C_{j,k}=\left.\frac{\partial h_j}{\partial x}\right|_{x_{\rm nom}(t_k)}J.$$
 
-$z_{j,k}$ contains the two angles from visible LSO $j$, so **$C_{j,k}$ is not the identity**. Known physics fixes the STM; training estimates three actuator gains $g$. This is a locally linear, phase-dependent model of the nonlinear orbit/angle system.
+$z_{j,k}$ contains the two angles from visible LSO $j$, so **$C_{j,k}$ is not the identity**. Known physics fixes the STM. Training estimates three actuator gains $g$. This is a locally linear, phase-dependent model of the nonlinear orbit/angle system.
 '''),
 ('code', SETUP+'''
 orbit,data=sk.restore_study(ROOT,OUT/'data')
@@ -138,7 +140,7 @@ print('Angular-innovation sensitivity singular values:',fit['jacobian_singular_v
 
 Following Studios 5 and 11, minimize covariance-standardized **raw angular innovations** on training trajectories, updating only when an LSO is visible. No generated full-state observations or saved truth enter the fit. Filtered state histories are correlated outputs, so they support exploratory plots and guidance, not independent-measurement regression.
 
-Validation compares unity and fitted gains; independent test trajectories assess angular prediction and navigation accuracy. Free propagation uses its initial angular update and then the known commands, with no later measurements. Truth is used only to evaluate state errors.
+Validation compares unity and fitted gains. Independent test trajectories assess angular prediction and navigation accuracy. Free propagation uses its initial angular update and then the known commands, with no later measurements. Truth is used only to evaluate state errors.
 '''),
 ('code', '''
 scores={name:sk.prediction_scores(orbit,rec,gains) for name,rec in data.items()}
@@ -152,9 +154,9 @@ np.savez_compressed(OUT/'test_predictions.npz',**pred,free_simulation=free['navi
 ('md', r'''
 ## Do the residuals support the predictor?
 
-Use standardized angular innovations with actual time lags and visibility gaps intact. Ljung–Box uses eligible contiguous runs with Holm adjustment; a mask-conditioned Monte Carlo maximum-CCF test covers the input/channel/lag family. No gaps or independent trajectories are concatenated, and no fitted ARMA degrees of freedom are subtracted for the fixed model on test data.
+Use standardized angular innovations with actual time lags and visibility gaps intact. Ljung–Box uses eligible contiguous runs with Holm adjustment. A mask-conditioned Monte Carlo maximum-CCF test covers the input/channel/lag family. No gaps or independent trajectories are concatenated, and no fitted ARMA degrees of freedom are subtracted for the fixed model on test data.
 
-ADF/KPSS also uses contiguous observed runs, reporting insufficient support explicitly. Whiteness tests the predictor/noise model and residual–input correlation screens unexplained command effects; neither establishes controller success.
+ADF/KPSS also uses contiguous observed runs, reporting insufficient support explicitly. Residual whiteness checks whether the assumed noise model is adequate. Residual–input correlation checks whether the commanded impulses remain related to the prediction error. Passing these checks does not guarantee that the orbit model or the station-keeping controller is accurate.
 '''),
 ('code', '''
 residual=ld.residual_report(pred['standardized'],test.u,orbit.settings['residual_lags'])
@@ -169,9 +171,9 @@ np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items()
 ('md', r'''
 ## Does LSO-guided station keeping meet the limits?
 
-Guidance selects no burn or an impulse now/one/two intervals later using only the LSO-derived departure estimate, without truth feedback or a supplied burn schedule. The estimator coasts through outages; candidate burns are checked by nonlinear propagation. Both sides of impulses and coast substeps are evaluated against the **3-D norm** limits.
+Guidance selects no burn or an impulse now/one/two intervals later using only the LSO-derived departure estimate, without truth feedback or a supplied burn schedule. The estimator coasts through outages. Candidate burns are checked by nonlinear propagation. Both sides of impulses and coast substeps are evaluated against the **3-D norm** limits.
 
-This single predeclared trial establishes sampled performance, not a continuous-time guarantee or population success rate. A failure can arise from navigation, prediction or the single-impulse planner; this plot alone cannot assign it to a model class.
+This single predeclared trial establishes sampled performance, not a continuous-time guarantee or population success rate. A failure can arise from navigation, prediction or the single-impulse planner. This plot alone cannot assign it to a model class.
 '''),
 ('code', '''
 trial=sk.stationkeeping_trial(orbit,gains)
@@ -184,13 +186,13 @@ table(['Metric','Observed value'],[(k,summary[k]) for k in ('completed','last_da
 np.savez_compressed(OUT/'closed_loop.npz',**{k:v for k,v in trial.items() if k!='summary'})
 (OUT/'closed_loop_summary.json').write_text(json.dumps(summary,indent=2)+'\\n')
 rejects=int(np.nansum(residual['ljung_box_holm_p']<.05))
-display(Markdown(f'**Noise-model conclusion:** {rejects}/{residual["eligible_whiteness_tests"]} eligible whiteness tests reject after adjustment and the global residual–input p-value is {residual["ccf_global_p"]:.3g}; these tests '+('flag predictor/noise inadequacy.' if rejects or residual['ccf_global_p']<.05 else 'do not reject the tested assumptions at 5%, without proving the model correct.')))
-display(Markdown('**Station-keeping conclusion:** '+('both required norms remain inside their limits at all evaluated samples of the completed run.' if summary['completed'] and summary['all_evaluated_samples_inside'] else f'the LSO-guided baseline does not establish the full corridor requirement; its observed peaks are {summary["maximum_position_km"]:.3g} km and {summary["maximum_velocity_m_s"]:.3g} m/s.')))
+display(Markdown(f'**Noise-model conclusion:** {rejects}/{residual["eligible_whiteness_tests"]} eligible whiteness tests reject after adjustment and the global residual–input p-value is {residual["ccf_global_p"]:.3g}, so these tests '+('flag predictor/noise inadequacy.' if rejects or residual['ccf_global_p']<.05 else 'do not reject the tested assumptions at 5%, without proving the model correct.')))
+display(Markdown('**Station-keeping conclusion:** '+('both required norms remain inside their limits at all evaluated samples of the completed run.' if summary['completed'] and summary['all_evaluated_samples_inside'] else f'the LSO-guided baseline does not establish the full corridor requirement, with observed peaks of {summary["maximum_position_km"]:.3g} km and {summary["maximum_velocity_m_s"]:.3g} m/s.')))
 '''),
 ('md', r'''
 ## Next model discussion
 
-The physical basis and measured phase dependence support a periodic STM starting model, not a globally LTI one. Review LSO availability, gain uncertainty, raw angular residuals and navigation error before selecting a local OE/BJ model or periodic parameter basis (Studio 13). NARX remains deferred; improving navigation or the burn planner may matter more than increasing black-box complexity.
+The physical basis and measured phase dependence support a periodic STM starting model, not a globally LTI one. Review LSO availability, gain uncertainty, raw angular residuals and navigation error before selecting a local OE/BJ model or periodic parameter basis (Studio 13). NARX remains deferred. Improving navigation or the burn planner may matter more than increasing black-box complexity.
 ''')]
 
 

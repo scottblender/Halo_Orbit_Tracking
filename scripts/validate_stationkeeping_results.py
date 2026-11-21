@@ -9,6 +9,7 @@ OUT=ROOT/'artifacts/stationkeeping'
 for name in ('01_stationkeeping_identification.ipynb','02_stm_greybox_stationkeeping.ipynb'):
     nb=nbformat.read(ROOT/'notebooks'/name,as_version=4)
     nbformat.validate(nb)
+    assert all(';' not in c.source for c in nb.cells if c.cell_type=='markdown'), name+' prose contains a semicolon'
     for cell in nb.cells:
         if cell.cell_type=='code':
             assert cell.execution_count is not None, (name,'unexecuted code')
@@ -20,6 +21,9 @@ for name in ('01_stationkeeping_identification.ipynb','02_stm_greybox_stationkee
                  '**Result:**' in str(o.get('data',{}).get('text/markdown',''))
                  for c in nb.cells for o in c.get('outputs',[]))
     assert captions == figures, (name,'each figure needs purpose/result sentences',captions,figures)
+    for c in nb.cells:
+        for o in c.get('outputs',[]):
+            assert ';' not in str(o.get('data',{}).get('text/markdown','')), name+' displayed prose contains a semicolon'
     print(name,'executed, figures:',figures)
 meta=json.loads((OUT/'data/experiment.json').read_text())
 assert meta['measurement_source']=='lso_angles'

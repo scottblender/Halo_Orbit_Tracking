@@ -37,7 +37,7 @@ def diagram(orbit,out):
                       ((10,2.95),(10,1.95)),((8.25,1.3),(7.75,1.3)),
                       ((4.25,1.3),(3.75,1.3)),((2,1.95),(2,2.95))]:
         ax.annotate('',xy=end,xytext=start,arrowprops=dict(arrowstyle='->',lw=2,color=BLUE))
-    ax.text(6,.12,'Identification fits gains using raw angular innovations; truth is reserved for simulation and evaluation.',
+    ax.text(6,.12,'Identification fits gains using raw angular innovations. Truth is reserved for simulation and evaluation.',
             ha='center',fontsize=12)
     finish(fig,out,'00_lso_feedback_diagram',
            'This diagram identifies the measurement and feedback paths used to keep the NRHO near its nominal orbit.',
@@ -82,7 +82,9 @@ def lso_measurements(orbit,rec,out):
     coverage=np.mean(np.any(rec.visible,axis=-1))
     finish(fig,out,'02_raw_lso_angles_visibility',
            'The angular-departure plots show the actual noisy LSO data relative to the nominal line of sight, with missing samples left blank.',
-           f'At least one LSO is visible at {100*coverage:.1f}% of training epochs, so state estimates must coast through the remaining visibility gaps.')
+           f'At least one LSO is visible at {100*coverage:.1f}% of training epochs, '+
+           ('giving full network coverage in this case even though individual LSO channels are masked.' if coverage==1 else
+            'so the state estimator must coast through epochs without a visible observatory.'))
 
 
 def spectra(orbit,spec,out):
