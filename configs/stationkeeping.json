@@ -10,7 +10,12 @@
   "initial_velocity_sigma_m_s": 0.0003,
   "navigation_position_sigma_km": 0.003,
   "navigation_velocity_sigma_m_s": 0.00003,
-  "excitation_sigma_m_s": 0.0003,
+  "excitation_sigma_m_s": 0.003,
+  "measurement_source": "lso_angles",
+  "lso_prior_position_sigma_km": 1.0,
+  "lso_prior_velocity_sigma_m_s": 0.01,
+  "uncontrolled_periods": 24,
+  "uncontrolled_stop_km": 20000,
   "simulated_actuator_gains": [0.98, 1.03, 0.96],
   "welch_length": 32,
   "welch_overlap": 0.5,
@@ -25,3 +30,4 @@
   "fuel_weight": 0.001,
   "nonlinear_samples_per_step": 8
 }
+

@@ -1,5 +1,38 @@
 # Course alignment and experiment scope
 
+## Current LSO measurement path
+
+The active notebooks use `lso_stationkeeping.py` rather than the earlier synthetic
+full-state measurement demonstration. Three LSOs supply alpha/delta angles with
+the configured angular noise, horizon, range and Sun/Earth keep-outs. Navigation
+uses a periodic STM and the linearized angular map, with no state-measurement
+identity matrix. Identification minimizes raw angular innovations directly,
+avoiding regression on correlated navigation estimates. Truth is reserved for
+sensor generation and error evaluation. The active sampling cadence is recorded
+explicitly as one uniform epoch per station-keeping decision.
+
+Missing angles remain NaN. ACF and CCF preserve actual epoch lags and independent
+arc boundaries; Ljung–Box/ADF/KPSS use sufficiently long contiguous observed runs.
+Holm adjusts the eligible whiteness-test family, and a Gaussian Monte Carlo
+maximum-CCF test conditions on the actual masks and open-loop commands. Insufficient
+support is reported, not repaired by concatenating observation gaps. Welch curves
+of navigation histories include the estimator and are not plant-only FRFs.
+
+All active figures carry a purpose sentence and a numerical result sentence.
+Notebook 2 contains three figures; its remaining diagnostics are concise tables.
+Uncontrolled propagation requests up to 24 orbits, preserving continuous truth
+and recording a declared 20,000 km cutoff or integration failure. Two orthographic
+orbit projections replace the earlier overlapping 3-D labels.
+
+The physical CR3BP vector field is nonlinear and autonomous in rotating axes.
+The departure model is time dependent because its Jacobian is evaluated along
+a moving periodic reference; its STM is locally linear time periodic. Angular
+measurement geometry and visibility introduce further time dependence. This
+distinction is explicit in the notebook conclusions and feedback block diagram.
+
+The detailed historical full-state protocol below describes the first overhaul;
+the LSO protocol above supersedes its measurement and residual-handling assumptions.
+
 The active project asks whether an identified, phase-dependent departure model
 can plan impulse magnitude and orbital phase while maintaining **3-D** position
 error below **10 km** and inertial velocity error below **0.1 m/s**. Both errors

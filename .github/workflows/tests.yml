@@ -19,7 +19,7 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - name: Scientific regression tests
         run: >-
-          python -m pytest -q tests/test_stationkeeping.py
+          python -m pytest -q tests/test_stationkeeping.py tests/test_lso_stationkeeping.py
           tests/test_reference_correction.py tests/test_stability.py
           tests/test_scientific_models.py
       - name: Execute both station-keeping notebooks
@@ -37,3 +37,4 @@ jobs:
             artifacts/stationkeeping/
           if-no-files-found: error
           retention-days: 30
+
