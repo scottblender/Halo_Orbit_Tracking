@@ -45,7 +45,9 @@ with np.load(OUT / 'closed_loop.npz') as trial:
     burn_days = trial['burn_day']
     commands = trial['commands']
     assert days.ndim == 1 and days.size, 'No propagated epochs'
-    assert np.isfinite(days).all() and np.all(np.diff(days) >= 0), 'Invalid propagation epochs'
+    assert np.isfinite(days).all(), 'Nonfinite propagation epochs'
+    time_tolerance = 4 * np.spacing(np.max(np.abs(days)))
+    assert np.all(np.diff(days) >= -time_tolerance), 'Propagation epochs run backward'
     assert np.isfinite(trial['output']).all(), 'Nonfinite propagated state'
     assert trial['output'].shape == (days.size, 6), 'State history does not match epochs'
     assert commands.shape == (burn_days.size, 3), 'Impulse history does not match burn epochs'

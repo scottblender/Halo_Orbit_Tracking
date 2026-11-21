@@ -78,6 +78,7 @@ def test_annual_trial_stops_at_requested_horizon_off_the_measurement_grid(orbit,
     assert trial['summary']['completed']
     assert trial['day'][-1] == pytest.approx(duration)
     assert np.all(trial['day'] <= duration + 1e-12)
+    assert np.all(np.diff(trial['day']) >= 0)
     assert len(trial['angles']) == 3
     assert trial['summary']['annual_delta_v_m_s'] == pytest.approx(0.015)
 

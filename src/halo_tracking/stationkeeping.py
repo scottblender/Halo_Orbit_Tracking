@@ -92,7 +92,7 @@ class OrbitModel:
         after = np.asarray(state).copy()
         after[3:] += (gains*np.asarray(command)*self.cfg['time_unit_s'] /
                       (1000*self.cfg['length_unit_km']))
-        end = start + self.dt if end_time is None else end_time
+        end = (k + 1) * self.dt if end_time is None else end_time
         times = np.linspace(start, end, substeps+1)
         states = propagate(after, times, self.cfg['mu'])
         return states[-1], times, states
