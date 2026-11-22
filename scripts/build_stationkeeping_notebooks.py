@@ -1,4 +1,5 @@
 """Build concise LSO-based course notebooks with live purpose/result captions."""
+import argparse
 from pathlib import Path
 import nbformat as nb
 ROOT=Path(__file__).resolve().parents[1]
@@ -203,7 +204,32 @@ The physical basis and measured phase dependence support a periodic STM starting
 ''')]
 
 
+def check_snapshot(path, expected):
+    """Check the committed source and that it contains a successful execution."""
+    saved = nb.read(path, as_version=4)
+    nb.validate(saved)
+    actual_source = [(cell.cell_type, cell.source) for cell in saved.cells]
+    expected_source = [(cell.cell_type, cell.source) for cell in expected.cells]
+    if actual_source != expected_source:
+        raise SystemExit(f'{path.name}: sources changed. Rebuild, run and commit the notebook.')
+    code = [cell for cell in saved.cells if cell.cell_type == 'code']
+    if any(cell.execution_count is None or any(out.output_type == 'error' for out in cell.outputs)
+           for cell in code):
+        raise SystemExit(f'{path.name}: commit a successful execution of every code cell.')
+    if not any('image/png' in out.get('data', {}) for cell in code for out in cell.outputs):
+        raise SystemExit(f'{path.name}: commit the executed notebook with inline figures.')
+
+
 if __name__ == '__main__':
-    for name,cells in [('01_stationkeeping_identification.ipynb',INTRO),('02_stm_greybox_stationkeeping.ipynb',MODEL)]:
-        nb.write(notebook(cells),ROOT/'notebooks'/name)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--check', action='store_true', help='Check committed notebooks without overwriting them')
+    args = parser.parse_args()
+    for name, cells in [('01_stationkeeping_identification.ipynb', INTRO),
+                        ('02_stm_greybox_stationkeeping.ipynb', MODEL)]:
+        path = ROOT / 'notebooks' / name
+        expected = notebook(cells)
+        if args.check:
+            check_snapshot(path, expected)
+        else:
+            nb.write(expected, path)
         print(name)

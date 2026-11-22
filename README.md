@@ -8,7 +8,7 @@ nominal orbit?
 | Notebook | Purpose |
 | --- | --- |
 | [01 — Data and identification](notebooks/01_stationkeeping_identification.ipynb) | LSO-derived directional input/output histories, raw angles and visibility, feedback block diagram, Welch/FRF, stationarity, phase dependence, nonlinearity, stability and up to 24 orbits of uncontrolled propagation |
-| [02 — STM grey box](notebooks/02_stm_greybox_stationkeeping.ipynb) | Raw angular-innovation identification, held-out validation, gap-aware residual/stationarity tests, and LSO-guided station keeping, summarized in three figures |
+| [02 — STM grey box](notebooks/02_stm_greybox_stationkeeping.ipynb) | Raw angular-innovation identification, held-out validation, gap-aware residual/stationarity tests, and LSO-guided station keeping and cumulative annual Δv |
 
 Each figure includes one purpose sentence and one result sentence computed from
 the current run. Notebook 1 uses a 3D Moon-centred orbit view and places its legend outside the plotting axes. Conclusions
@@ -26,12 +26,18 @@ remain missing, and estimates/covariances coast through visibility gaps.
 ```sh
 python -m pip install -e ".[dev]"
 python -m pytest -q tests/test_stationkeeping.py tests/test_lso_stationkeeping.py
+python scripts/build_stationkeeping_notebooks.py --check
 python scripts/check_notebooks.py --in-process
+python scripts/validate_stationkeeping_results.py
 ```
 
 Run Notebook 01 then Notebook 02, or run either independently from the repository
 root. Notebook 02 rebuilds missing/stale LSO data. The notebook builder is
-`scripts/build_stationkeeping_notebooks.py`. Configuration is in
+`scripts/build_stationkeeping_notebooks.py`. If you edit the builder, run it
+without flags, execute both notebooks and commit the executed `.ipynb` files.
+The Station-keeping scientific checks workflow checks committed notebooks, then
+builds, executes and archives a fresh copy with the numerical results.
+Configuration is in
 `configs/stationkeeping.json`. Noise, sites and optical gates come from
 `configs/baseline.json`. Uniform angular sampling is declared in the experiment
 metadata (one epoch per decision, approximately 1.5 hours), rather than silently
