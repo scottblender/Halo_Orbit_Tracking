@@ -243,7 +243,7 @@ The mean stayed inside both limits at every sampled epoch. **9 of 20 trials (45%
 
 Across all completed trials, annual commanded Δv averaged 6.87 m/s (range 6.48–7.38 m/s), with an average of 426 burns.
 
-[Benchmark run and downloadable trial data](https://github.com/scottblender/Halo_Orbit_Tracking/actions/runs/45171529580)
+The plot shows the mean and the middle 90% of trial errors at each sampled time. The dashed lines mark the corridor limits. The velocity panel shows why a mean below the limit can coexist with individual violations.
 '''),
 ('code', '''
 from IPython.display import Image
