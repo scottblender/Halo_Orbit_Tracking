@@ -27,6 +27,8 @@
   "stationkeeping_periods": 4,
   "annual_horizon_days": 365.25,
   "annual_planning_stride_steps": 1,
+  "controller_gain_sigma": 0.10,
+  "controller_planning_margin": 0.30,
   "horizon_steps": 8,
   "candidate_delay_steps": [0, 1, 2],
   "maximum_impulse_m_s": 0.2,

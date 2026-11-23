@@ -71,7 +71,7 @@ def test_annual_trial_stops_at_requested_horizon_off_the_measurement_grid(orbit,
     monkeypatch.setitem(orbit.settings, 'annual_horizon_days', duration)
     command = np.array([0.003, 0.004, 0.0])
     monkeypatch.setattr(lso.physics, 'plan_burn',
-                        lambda *args: {'delay': 0, 'command': command})
+                        lambda *args, **kwargs: {'delay': 0, 'command': command})
 
     trial = lso.stationkeeping_trial(orbit, np.ones(3), duration_days=duration)
 
@@ -118,12 +118,47 @@ def test_periodic_fit_recovers_synthetic_phase_gain_knots(orbit):
 def test_periodic_gain_is_used_at_the_executed_burn_phase(orbit, monkeypatch):
     selected = []
 
-    def plan(_, estimate, k, gain_at):
-        selected.append(gain_at(k + 1))
+    def plan(_, estimate, k, gain_at, *, planning_margin):
+        selected.append((gain_at(k + 1), planning_margin))
         return {'delay': 1, 'command': np.zeros(3)}
 
     monkeypatch.setattr(lso.physics, 'plan_burn', plan)
     gains = np.ones((orbit.n, 3))
     gains[1] = [1.1, .9, 1.05]
     lso.stationkeeping_trial(orbit, gains, duration_days=1.5 * orbit.dt_s / 86400)
-    np.testing.assert_allclose(selected[0], gains[1])
+    selected_gains, margin = selected[0]
+    np.testing.assert_allclose(selected_gains, gains[1])
+    assert margin == orbit.settings['controller_planning_margin']
+
+
+def test_extended_navigation_updates_at_the_estimated_state(orbit):
+    k = 3
+    z = np.array([2.5, -1.3, .8, .2, -.1, .15])
+    t = k * orbit.dt
+    estimate = orbit.state(z * orbit.scale, t)
+    measured = np.asarray([lso.angles_at(t, estimate, site) for site in orbit.sites])
+    visible = np.ones(len(orbit.sites), dtype=bool)
+    updated, covariance = lso._navigation_update(
+        orbit, k, z, orbit.P0, measured, visible, 'extended')
+    np.testing.assert_allclose(updated, z, atol=1e-12)
+    assert np.linalg.eigvalsh(covariance).min() >= -1e-12
+    linear, _ = lso._navigation_update(orbit, k, z, orbit.P0, measured, visible, 'linear')
+    assert np.linalg.norm(linear - z) > 1e-6
+
+
+def test_extended_navigation_accounts_for_burn_uncertainty(orbit, monkeypatch):
+    z = np.zeros(6)
+    command = np.array([.03, -.04, .02])
+    gains = np.array([.95, 1.03, 1.08])
+    monkeypatch.setitem(orbit.settings, 'controller_gain_sigma', 0.)
+    predicted, known = lso._navigation_propagate(
+        orbit, 0, z, orbit.P0, command, gains, 'extended')
+    monkeypatch.setitem(orbit.settings, 'controller_gain_sigma', .10)
+    repeated, uncertain = lso._navigation_propagate(
+        orbit, 0, z, orbit.P0, command, gains, 'extended')
+
+    end, _, _ = orbit.step(orbit.state(z, 0.), 0, command, gains)
+    np.testing.assert_allclose(predicted, orbit.output(end, orbit.dt) / orbit.scale, atol=1e-8)
+    np.testing.assert_allclose(predicted, repeated)
+    assert np.trace(uncertain) > np.trace(known)
+    assert np.linalg.eigvalsh(uncertain - known).min() >= -1e-12

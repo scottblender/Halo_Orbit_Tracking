@@ -12,6 +12,7 @@ import numpy as np
 from scipy.optimize import least_squares, lsq_linear
 
 from . import stationkeeping as physics
+from .dynamics import propagate_step
 from .measurements import predict as angles_at, measurement_jacobian, wrap, ARCSEC
 from .network import observations, sensor_configs
 
@@ -286,8 +287,53 @@ def uncontrolled(orbit):
                                           last_day=float(days[-1]), stop_reason=reason)
 
 
+def _navigation_update(orbit, k, z, P, measured, visible, mode):
+    """Update the estimated departure from the visible angles."""
+    selected = np.flatnonzero(np.repeat(visible, 2))
+    if not len(selected):
+        return z, P
+    if mode == 'extended':
+        t = k * orbit.dt
+        estimate = orbit.state(z * orbit.scale, t)
+        sites = [site for site, use in zip(orbit.sites, visible) if use]
+        expected = np.asarray([angles_at(t, estimate, site) for site in sites])
+        H = np.vstack([measurement_jacobian(t, estimate, site) @ orbit.J for site in sites])
+        innovation = _angular_departure(measured[visible], expected)
+    else:
+        nominal, C = orbit.observation_terms(k)
+        H = C[selected]
+        innovation = _angular_departure(measured, nominal)[selected] - H @ z
+    R = np.eye(len(selected)) * orbit.sigma_angle**2
+    K = np.linalg.solve(H @ P @ H.T + R, H @ P).T
+    M = np.eye(6) - K @ H
+    return z + K @ innovation, M @ P @ M.T + K @ R @ K.T
+
+
+def _navigation_propagate(orbit, k, z, P, command, gains, mode):
+    """Propagate the estimate and covariance through the commanded impulse."""
+    if mode == 'extended':
+        t, next_t = k * orbit.dt, (k + 1) * orbit.dt
+        estimate = orbit.state(z * orbit.scale, t)
+        # Convert an inertial delta-v to the rotating velocity coordinates at the burn epoch.
+        velocity_unit = orbit.cfg['time_unit_s'] / (1000 * orbit.cfg['length_unit_km'])
+        estimate[3:] += velocity_unit * gains * command
+        estimate, phi, _ = propagate_step(estimate, t, next_t, orbit.cfg['mu'])
+        A = orbit.Jinv @ phi @ orbit.J
+        z = orbit.output(estimate, next_t) / orbit.scale
+        # Declared actuator-gain uncertainty is mapped through the local STM.
+        sigma_gain = orbit.settings.get('controller_gain_sigma', .10)
+        impact = (orbit.Jinv @ phi[:, 3:]) * (velocity_unit * sigma_gain * command)
+        P = A @ P @ A.T + orbit.Q + impact @ impact.T
+    else:
+        A, B = orbit.A[k % orbit.n], orbit.B[k % orbit.n]
+        z = A @ z + B @ (gains * command)
+        P = A @ P @ A.T + orbit.Q
+    return z, (P + P.T) / 2
+
+
 def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
-                        planning_stride_steps=1, stop_on_departure_cutoff=True):
+                        planning_stride_steps=1, stop_on_departure_cutoff=True, *,
+                        navigation='extended'):
     """Simulate LSO-guided nonlinear station keeping for a fixed requested span.
 
     State estimates use visible noisy angles only. The longer annual case can
@@ -295,6 +341,8 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
     sample. Truth is used only by the sensor simulator and evaluation summary.
     """
     s = orbit.settings
+    if navigation not in ('extended', 'linear'):
+        raise ValueError("navigation must be 'extended' or 'linear'")
     if duration_days is None:
         count = s['stationkeeping_periods']*orbit.n
         requested_days = count*orbit.dt_s/86400
@@ -320,20 +368,13 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
     def gain_at(k):
         return gains_by_phase[k % orbit.n]
 
+    planning_margin = s.get('controller_planning_margin', s['planning_margin']) if navigation == 'extended' else None
     pending, scheduled, stop_reason = None, None, 'completed requested propagation'
     for k in range(count + int(ends_on_grid)):
         t = k*orbit.dt
         obs = observations(np.array([t]), state[None,:], orbit.cfg, seed+100000+k)
         measured, mask = obs['measured_angles_rad'][0], obs['sensor_visible'][0]
-        nominal, C = orbit.observation_terms(k)
-        selected = np.flatnonzero(np.repeat(mask,2)); H = C[selected]
-        if len(selected):
-            R = np.eye(len(selected))*orbit.sigma_angle**2
-            innovation = _angular_departure(measured, nominal)[selected]-H @ z
-            K = np.linalg.solve(H @ P @ H.T+R, H @ P).T
-            z += K @ innovation
-            M = np.eye(6)-K @ H
-            P = M @ P @ M.T+K @ R @ K.T
+        z, P = _navigation_update(orbit, k, z, P, measured, mask, navigation)
         nav.append(z*orbit.scale); raw.append(measured); visibility.append(mask)
         covariance.append(P*orbit.scale[:,None]*orbit.scale[None,:])
         if k == count:
@@ -343,7 +384,7 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
             break
         command = np.zeros(3)
         if pending is None and k % planning_stride_steps == 0:
-            plan = physics.plan_burn(orbit, z*orbit.scale, k, gain_at)
+            plan = physics.plan_burn(orbit, z*orbit.scale, k, gain_at, planning_margin=planning_margin)
             if plan['delay'] >= 0 and np.linalg.norm(plan['command']) > 1e-10:
                 pending, scheduled = plan['command'], k+plan['delay']
         if pending is not None and scheduled == k:
@@ -357,10 +398,8 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
         )
         outputs.extend(orbit.output(x,epoch) for x,epoch in zip(xx,tt))
         days.extend(tt*orbit.cfg['time_unit_s']/86400)
-        A, B = orbit.A[k % orbit.n], orbit.B[k % orbit.n]
-        z = A @ z+B @ (gain_at(k) * command)
-        P = A @ P @ A.T+orbit.Q
-        P = (P+P.T)/2
+        if end_time is None:
+            z, P = _navigation_propagate(orbit, k, z, P, command, gain_at(k), navigation)
     y, day = np.asarray(outputs), np.asarray(days)
     pos, vel = np.linalg.norm(y[:,:3],axis=1),np.linalg.norm(y[:,3:],axis=1)
     outside = (pos>s['position_limit_km']) | (vel>s['velocity_limit_m_s'])
@@ -369,9 +408,10 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
     annual_horizon = s.get('annual_horizon_days')
     annual_requested = (annual_horizon is not None and
                         np.isclose(requested_days, annual_horizon, rtol=0, atol=1e-9))
-    summary = dict(seed=seed, measurement_source='lso_angles',
+    summary = dict(seed=seed, measurement_source='lso_angles', navigation=navigation,
                    requested_duration_days=requested_days,
                    planning_stride_steps=int(planning_stride_steps),
+                   planning_margin=s['planning_margin'] if planning_margin is None else planning_margin,
                    completed=completed, stop_reason=stop_reason, last_day=float(day[-1]),
                    maximum_position_km=float(pos.max()), maximum_velocity_m_s=float(vel.max()),
                    all_evaluated_samples_inside=bool(not outside.any()),

@@ -296,7 +296,7 @@ def uncontrolled(orbit, periods=4):
     return np.asarray(times)*orbit.cfg['time_unit_s']/86400, np.asarray(outputs)
 
 
-def plan_burn(orbit, estimate, k, gains):
+def plan_burn(orbit, estimate, k, gains, *, planning_margin=None):
     """Predict magnitude AND phase from current estimated departure, no schedule.
 
     Enumerate waits, solve a weighted path least-squares impulse, then validate
@@ -306,6 +306,7 @@ def plan_burn(orbit, estimate, k, gains):
     gain_at = gains if callable(gains) else lambda _: gains
     s = orbit.settings
     horizon = s['horizon_steps']
+    margin = s['planning_margin'] if planning_margin is None else planning_margin
     base = np.asarray(estimate)/orbit.scale
     limits = np.array([s['position_limit_km'], s['velocity_limit_m_s']])
     guesses = [(-1, np.zeros(3))]  # no burn
@@ -340,7 +341,7 @@ def plan_burn(orbit, estimate, k, gains):
                        np.linalg.norm(path[:, 3:], axis=1)/limits[1]]
         peak = float(ratios.max())
         # Prefer smallest impulse if margin is met; otherwise minimize predicted violation.
-        excess = max(0., peak-s['planning_margin'])
+        excess = max(0., peak - margin)
         cost = excess**2 + s['fuel_weight']*np.linalg.norm(command)/s['maximum_impulse_m_s']
         candidates.append(dict(delay=delay, command=command, peak=peak, cost=cost))
     return min(candidates, key=lambda c:c['cost'])
