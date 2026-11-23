@@ -3,6 +3,8 @@ import numpy as np
 from scipy import stats
 from .stationkeeping_diagnostics import acov, holm, stationarity
 
+ANGULAR_STATIONARITY_MIN_SAMPLES = 24
+
 
 def longest_run(values):
     valid = np.isfinite(values)
@@ -18,7 +20,7 @@ def stationarity_rows(innovations):
     rows=[]
     for c in range(innovations.shape[-1]):
         segment=max((longest_run(row[:,c]) for row in innovations),key=len)
-        if len(segment)>=24:
+        if len(segment) >= ANGULAR_STATIONARITY_MIN_SAMPLES:
             r=stationarity(segment,f'LSO {c//2+1} '+('alpha' if c%2==0 else 'delta'))
             r['contiguous_samples']=len(segment)
             rows.append(r)

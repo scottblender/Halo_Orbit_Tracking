@@ -176,7 +176,7 @@ np.savez_compressed(OUT/'test_predictions.npz',**pred,free_simulation=free['navi
 
 Use standardized angular innovations with actual time lags and visibility gaps intact. Ljung–Box uses eligible contiguous runs with Holm adjustment. A mask-conditioned Monte Carlo maximum-CCF test covers the input/channel/lag family. No gaps or independent trajectories are concatenated, and no fitted ARMA degrees of freedom are subtracted for the fixed model on test data.
 
-ADF/KPSS also uses contiguous observed runs, reporting insufficient support explicitly. Residual whiteness checks whether the assumed noise model is adequate. Residual–input correlation checks whether the commanded impulses remain related to the prediction error. Passing these checks does not guarantee that the orbit model or the station-keeping controller is accurate.
+ADF and KPSS use the longest uninterrupted observed run for each channel. The table reports the channels that support testing. A coverage summary reports any channels left out. Residual whiteness checks the adequacy of the assumed noise model. Residual–input correlation checks whether commanded impulses remain related to the prediction error. Controller performance is evaluated separately using the corridor limits.
 '''),
 ('code', '''
 residual=ld.residual_report(pred['standardized'],test.u,orbit.settings['residual_lags'])
@@ -188,8 +188,19 @@ table(['Model','Ljung–Box rejects','Eligible runs','Input–innovation p'],
         q['eligible_whiteness_tests'],f"{q['ccf_global_p']:.3g}")
        for label,q in [('Global gains',global_residual),('Periodic gains',residual)]])
 stationarity_rows=ld.stationarity_rows(pred['standardized'])
-def fmt(p): return 'insufficient data' if p is None else f'{p:.3g}'
-table(['Angular channel','Contiguous samples','ADF p','KPSS p','Joint reading'],[(r['channel'],r['contiguous_samples'],fmt(r['adf_p']),fmt(r['kpss_p']),r['reading']) for r in stationarity_rows])
+tested=[r for r in stationarity_rows if r['adf_p'] is not None and r['kpss_p'] is not None]
+if tested:
+    table(['Angular channel','Contiguous samples','ADF p','KPSS p','Joint reading'],
+          [(r['channel'],r['contiguous_samples'],f"{r['adf_p']:.3g}",
+            f"{r['kpss_p']:.3g}",r['reading']) for r in tested])
+skipped=[r for r in stationarity_rows if r['adf_p'] is None or r['kpss_p'] is None]
+if skipped:
+    sites=', '.join(sorted({r['channel'].rsplit(' ',1)[0] for r in skipped}))
+    counts=[r['contiguous_samples'] for r in skipped]
+    coverage=str(min(counts)) if min(counts)==max(counts) else f'{min(counts)}–{max(counts)}'
+    display(Markdown(f'**Angular stationarity coverage:** Tested {len(tested)} of {len(stationarity_rows)} channels. '
+                     f'The {len(skipped)} skipped channels ({sites}) had longest observed runs of {coverage} '
+                     f'consecutive samples. ADF and KPSS require at least {ld.ANGULAR_STATIONARITY_MIN_SAMPLES} here.'))
 (OUT/'innovation_stationarity.json').write_text(json.dumps(stationarity_rows,indent=2)+'\\n')
 np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items() if isinstance(v,np.ndarray)})
 (OUT/'optical_residual_summary.json').write_text(json.dumps({k:v for k,v in residual.items() if not isinstance(v,np.ndarray)},indent=2)+'\\n')
