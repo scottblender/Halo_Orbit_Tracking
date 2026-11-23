@@ -206,26 +206,30 @@ np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items()
 (OUT/'optical_residual_summary.json').write_text(json.dumps({k:v for k,v in residual.items() if not isinstance(v,np.ndarray)},indent=2)+'\\n')
 '''),
 ('md', r'''
-## Do LSO-guided station keeping limits hold over a year?
+## Does the gain model change full-year station-keeping?
 
 Guidance uses only the LSO-derived departure estimate, with state updates at every measurement sample and planner calls at every measurement sample (about 1.5 hours). Candidate burns are checked by nonlinear propagation. The one-year run reports sampled corridor performance and the cumulative commanded Δv from the actual simulated impulses.
 
-The comparison holds the initial departure, noise seed and measurement cadence fixed. The updated controller starts planning corrections earlier, using a target of 30% of the corridor limits instead of the baselines’ 70%. The two baselines use the reference-linearized navigation filter. The extended filter propagates the estimated state with the nonlinear dynamics, recomputes its local STM and visible angle Jacobians, and accounts for uncertainty in executed impulse magnitude. It uses the same phase-dependent actuator fit and no truth-state updates. These are paired outcomes from one simulated year, with completion reported separately from corridor compliance.
+Both runs use the revised extended navigation filter and the same single-burn planner, which targets 30% of the corridor limits. The filter propagates the estimated state with nonlinear dynamics, recomputes its local STM and visible angle Jacobians, and accounts for impulse uncertainty. The initial departure, angle-noise seed and measurement cadence are fixed. The comparison isolates the choice of a global or periodic actuator gain fit for this simulated year. The follow-up plots show the periodic-gain configuration evaluated in the Monte Carlo benchmark.
 '''),
 ('code', '''
-controllers={label:(g,'linear') for label,g in models.items()}
-controllers['Periodic gains + extended navigation']=(gains,'extended')
 trials={model:sk.stationkeeping_trial(
-    orbit,model_gains, navigation=mode,
+    orbit,model_gains, navigation='extended', seed=26960,
     duration_days=orbit.settings['annual_horizon_days'],
     planning_stride_steps=orbit.settings['annual_planning_stride_steps'],
     stop_on_departure_cutoff=False)
-    for model,(model_gains,mode) in controllers.items()}
-trial=trials['Periodic gains + extended navigation']
+    for model,model_gains in models.items()}
+trial=trials['Periodic gains']
 comparison={model:result['summary'] for model,result in trials.items()}
 (OUT/'annual_model_comparison.json').write_text(json.dumps(comparison,indent=2)+'\\n')
-table(['Model','Completed','First exit [day]','Annual commanded Δv [m/s]'],
-      [(model,q['completed'],q['first_sampled_exit_day'],q['annual_delta_v_m_s'])
+def annual_metric(value):
+    return '—' if value is None else f'{value:.3g}'
+table(['Gains with revised filter','Completed','First exit [day]','Peak position [km]',
+       'Peak velocity [m/s]','Burns','Commanded Δv [m/s]'],
+      [(model,'Yes' if q['completed'] else 'No',
+        'No exit' if q['first_sampled_exit_day'] is None else annual_metric(q['first_sampled_exit_day']),
+        annual_metric(q['maximum_position_km']),annual_metric(q['maximum_velocity_m_s']),
+        q['burns'],annual_metric(q['annual_delta_v_m_s']))
        for model,q in comparison.items()])
 if (OUT/'uncontrolled.npz').exists():
     with np.load(OUT/'uncontrolled.npz') as z: no_day,no_y=z['day'],z['output']
@@ -238,7 +242,9 @@ np.savez_compressed(OUT/'closed_loop.npz',**{k:v for k,v in trial.items() if k!=
 (OUT/'closed_loop_summary.json').write_text(json.dumps(summary,indent=2)+'\\n')
 rejects=int(np.nansum(residual['ljung_box_holm_p']<.05))
 display(Markdown(f'**Noise-model conclusion:** {rejects}/{residual["eligible_whiteness_tests"]} eligible whiteness tests reject after adjustment and the global residual–input p-value is {residual["ccf_global_p"]:.3g}, so these tests '+('flag predictor/noise inadequacy.' if rejects or residual['ccf_global_p']<.05 else 'do not reject the tested assumptions at 5%, without proving the model correct.')))
-display(Markdown('**Station-keeping conclusion:** '+('both required norms remain inside their limits at all evaluated samples of the completed run.' if summary['completed'] and summary['all_evaluated_samples_inside'] else f'the extended-navigation controller does not establish the full corridor requirement, with observed peaks of {summary["maximum_position_km"]:.3g} km and {summary["maximum_velocity_m_s"]:.3g} m/s.')))
+compliant=[model for model,q in comparison.items() if q['completed'] and q['all_evaluated_samples_inside']]
+status = ', '.join(compliant) if compliant else 'Neither gain model'
+display(Markdown(f'**Full-year corridor compliance:** {status}. This is a paired comparison for one starting departure and one observation-noise seed.'))
 '''),
 ('md', r'''
 ## How often does the single-burn controller stay inside the corridor?
