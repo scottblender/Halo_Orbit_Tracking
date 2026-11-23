@@ -1,0 +1,74 @@
+name: Single-burn annual Monte Carlo
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/single-burn-monte-carlo.yml
+      - scripts/run_single_burn_monte_carlo.py
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONPATH: src
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+
+jobs:
+  trial:
+    if: github.head_ref == 'bench/single-burn-monte-carlo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        trial: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy scipy matplotlib
+      - uses: actions/download-artifact@v4
+        with:
+          name: stationkeeping-executed-notebooks-and-results
+          path: reference-run
+          github-token: ${{ github.token }}
+          run-id: 45103526426
+      - env:
+          TRIAL: ${{ matrix.trial }}
+        run: python scripts/run_single_burn_monte_carlo.py --trial "$TRIAL" --fit reference-run/artifacts/stationkeeping/greybox_fit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: single-burn-trial-${{ matrix.trial }}
+          path: trial-*.npz
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    needs: trial
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy scipy matplotlib
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: single-burn-trial-*
+          merge-multiple: true
+          path: benchmark-trials
+      - run: python scripts/run_single_burn_monte_carlo.py --aggregate benchmark-trials
+      - uses: actions/upload-artifact@v4
+        with:
+          name: single-burn-monte-carlo-results
+          path: benchmark-results/
+          if-no-files-found: error
