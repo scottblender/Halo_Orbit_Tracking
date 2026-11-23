@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, Circle, Patch
 from matplotlib.lines import Line2D
+from matplotlib.ticker import MaxNLocator
 from IPython.display import display, Markdown
 from .measurements import ARCSEC
 from .stationkeeping_plots import style
@@ -180,8 +181,8 @@ def structure(d,out):
 def geometry_growth(orbit,day,y,summary,out):
     xyz=(orbit.reference(np.linspace(0,orbit.T,800,endpoint=False))[:3].T-
          np.array([1-orbit.cfg['mu'],0,0]))*orbit.cfg['length_unit_km']/1000
-    geometry = plt.figure(figsize=(11, 8))
-    ax3d = geometry.add_axes([.08, .10, .67, .82], projection='3d')
+    geometry = plt.figure(figsize=(9, 8))
+    ax3d = geometry.add_axes([.10, .13, .64, .75], projection='3d')
 
     ax3d.plot(xyz[:,0],xyz[:,1],xyz[:,2],color=BLUE,lw=2)
     radius=orbit.cfg['site']['radius_km']/1000
@@ -201,14 +202,19 @@ def geometry_growth(orbit,day,y,summary,out):
     handles.extend(Line2D([0],[0],marker='o',linestyle='None',color='none',
                           markerfacecolor=site_colors[j%len(site_colors)],markersize=7,
                           label=f'LSO {j+1}') for j in range(len(orbit.sites)))
-    ax3d.set(xlabel='Moon-centred x [10³ km]',
-             ylabel='Moon-centred y [10³ km]',
-             zlabel='Moon-centred z [10³ km]',
-             title='Nominal NRHO and LSO locations')
+    geometry.suptitle('Nominal NRHO and LSO locations', fontsize=18, y=.96)
+    geometry.text(.5, .908, r'Moon-centred rotating frame [$10^3$ km]',
+                  ha='center', fontsize=12)
+    ax3d.set_xlabel('x', labelpad=12, fontsize=13)
+    ax3d.set_ylabel('y', labelpad=13, fontsize=13)
+    ax3d.set_zlabel('z', labelpad=15, fontsize=13)
+    for axis, bins in ((ax3d.xaxis, 3), (ax3d.yaxis, 3), (ax3d.zaxis, 4)):
+        axis.set_major_locator(MaxNLocator(nbins=bins))
+        axis.set_tick_params(labelsize=10, pad=6)
     ax3d.set_box_aspect(np.maximum(np.ptp(xyz,axis=0),1.0))
     ax3d.view_init(elev=24,azim=-58)
-    geometry.legend(handles=handles, loc='center left', bbox_to_anchor=(.76, .55),
-                    frameon=True, fontsize=11)
+    geometry.legend(handles=handles, loc='center left', bbox_to_anchor=(.73, .55),
+                    frameon=False, fontsize=11)
     finish(geometry, out, '07_nominal_geometry',
            'The Moon-centred view shows the nominal NRHO and the locations of the lunar surface observatories.',
            f'The {len(orbit.sites)} fixed sites view the spacecraft from different directions as it moves along the orbit.',
