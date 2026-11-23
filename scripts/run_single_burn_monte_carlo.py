@@ -10,6 +10,8 @@ from halo_tracking import lso_stationkeeping as lso
 
 TRIALS = 20
 MASTER_SEED = 20261122
+# Independent orbit corrections can shift matching epochs by a fraction of a second.
+GRID_TOLERANCE_DAYS = 1e-5
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -56,20 +58,42 @@ def aggregate(directory):
     settings = lso.physics.load_settings(ROOT)[1]
     limits = np.array([settings["position_limit_km"], settings["velocity_limit_m_s"]])
     trials, rows, grid = [], [], None
+    horizon = settings["annual_horizon_days"]
+    largest_shift = 0.0
     for index in range(1, TRIALS + 1):
-        with np.load(directory / f"trial-{index:02d}.npz") as data:
+        path = directory / f"trial-{index:02d}.npz"
+        with np.load(path) as data:
             day, values = data["day"], data["values"]
             row = json.loads(data["summary"].item())
+        if not row["completed"] or row["trial"] != index:
+            raise ValueError(f"{path}: expected completed trial {index}")
+        if (day.ndim != 1 or day.size < 2 or not np.isfinite(day).all()
+                or day[0] != 0 or not np.isclose(day[-1], horizon, rtol=0, atol=1e-9)):
+            raise ValueError(f"{path}: invalid propagation epochs for the requested horizon")
+        steps = np.diff(day)
+        if np.any(steps < 0):
+            raise ValueError(f"{path}: propagation epochs must be nondecreasing")
+        if values.shape != (day.size, 2) or not np.isfinite(values).all():
+            raise ValueError(f"{path}: expected finite position and velocity errors at every epoch")
         if grid is None:
             grid = day
-        assert np.array_equal(grid, day) and row["completed"] and row["trial"] == index
+            repeated_epochs = steps == 0
+        if day.shape != grid.shape or not np.array_equal(steps == 0, repeated_epochs):
+            raise ValueError(f"{path}: sample layout differs from trial 1")
+        shift = float(np.max(np.abs(day - grid)))
+        if shift > GRID_TOLERANCE_DAYS:
+            raise ValueError(
+                f"{path}: maximum epoch shift {shift:g} days exceeds "
+                f"{GRID_TOLERANCE_DAYS:g} days"
+            )
+        largest_shift = max(largest_shift, shift)
         assert np.allclose(values.max(axis=0),
                            [row["maximum_position_km"], row["maximum_velocity_m_s"]])
         assert row["all_evaluated_samples_inside"] == bool((values <= limits).all())
         rows.append(row)
         trials.append(values)
 
-    assert np.isclose(grid[-1], settings["annual_horizon_days"], rtol=0, atol=1e-9)
+    print(f"Largest timestamp difference across matched samples: {largest_shift:.12g} days")
     assert len({row["seed"] for row in rows}) == TRIALS
     values = np.stack(trials)
     mean = values.mean(axis=0)
