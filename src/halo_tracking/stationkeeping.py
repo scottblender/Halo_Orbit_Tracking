@@ -303,6 +303,7 @@ def plan_burn(orbit, estimate, k, gains):
     each candidate with the nonlinear model. The current pre-burn state and all
     pre/post-burn samples are scored. Grid feasibility is not continuous proof.
     """
+    gain_at = gains if callable(gains) else lambda _: gains
     s = orbit.settings
     horizon = s['horizon_steps']
     base = np.asarray(estimate)/orbit.scale
@@ -316,7 +317,7 @@ def plan_burn(orbit, estimate, k, gains):
             z = A @ z
             sensitivity = A @ sensitivity
             if j == delay:
-                sensitivity += orbit.B[(k+j) % orbit.n]*np.asarray(gains)[None, :]
+                sensitivity += orbit.B[(k+j) % orbit.n]*np.asarray(gain_at(k + j))[None, :]
             if j >= delay:
                 offsets.append(z)
                 matrices.append(sensitivity.copy())
@@ -331,7 +332,7 @@ def plan_burn(orbit, estimate, k, gains):
         path = [estimate]
         for j in range(horizon):
             u = command if j == delay else np.zeros(3)
-            state, tt, xx = orbit.step(state, k+j, u, gains,
+            state, tt, xx = orbit.step(state, k+j, u, gain_at(k + j),
                                        substeps=s['nonlinear_samples_per_step'])
             path.extend(orbit.output(x, t) for x,t in zip(xx, tt))
         path = np.asarray(path)

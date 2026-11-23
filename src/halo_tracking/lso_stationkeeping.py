@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 import numpy as np
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares, lsq_linear
 
 from . import stationkeeping as physics
 from .measurements import predict as angles_at, measurement_jacobian, wrap, ARCSEC
@@ -79,6 +79,23 @@ def schedule(orbit, visible):
     return out
 
 
+def _gain_schedule(orbit, gains):
+    gains = np.asarray(gains, dtype=float)
+    if gains.shape not in ((3,), (orbit.n, 3)) or not np.isfinite(gains).all():
+        raise ValueError('Supply three global gains or three finite gains per phase sample')
+    return np.broadcast_to(gains, (orbit.n, 3))
+
+
+def periodic_phase_weights(phase, windows):
+    """Linear weights for overlapping phase windows, including across phase zero."""
+    if windows < 3:
+        raise ValueError('Use at least three phase windows')
+    phase = np.asarray(phase, dtype=float) % 1.0
+    offsets = (phase[..., None] - np.arange(windows) / windows + .5) % 1.0 - .5
+    weights = np.maximum(1.0 - windows * np.abs(offsets), 0.0)
+    return weights / weights.sum(axis=-1, keepdims=True)
+
+
 def predict(orbit, rec, gains, free_run=False, schedules=None):
     """Periodic STM / linearized angular predictor; initial prior is nominal.
 
@@ -86,6 +103,7 @@ def predict(orbit, rec, gains, free_run=False, schedules=None):
     Cholesky standardization handles cross-station innovation covariance.
     No direct noisy position/velocity samples enter this calculation.
     """
+    gains_by_phase = _gain_schedule(orbit, gains)
     schedules = schedules or [schedule(orbit, m) for m in rec.visible]
     priors, navs, errors, standardized, covariances, angle_predictions = [], [], [], [], [], []
     for a, commands in enumerate(rec.u):
@@ -94,7 +112,7 @@ def predict(orbit, rec, gains, free_run=False, schedules=None):
         for k in range(len(commands)+1):
             if k:
                 j = (k-1) % orbit.n
-                z = orbit.A[j] @ z + orbit.B[j] @ (np.asarray(gains)*commands[k-1])
+                z = orbit.A[j] @ z + orbit.B[j] @ (gains_by_phase[j] * commands[k-1])
             nominal, C = orbit.observation_terms(k)
             selected, H, K, L, P = schedules[a][k]
             prior_rows.append(z*orbit.scale)
@@ -202,6 +220,40 @@ def fit_greybox(orbit, training):
                 criterion='visible raw angular innovations; fixed geometry/visibility-conditioned covariance')
 
 
+def fit_periodic_greybox(orbit, training, windows=6, smoothing=12.0):
+    """Fit orbit-phase gains jointly to visible one-step angular innovations."""
+    if windows > orbit.n or not np.isfinite(smoothing) or smoothing < 0:
+        raise ValueError('Phase windows cannot exceed the phase grid and smoothing must be finite and nonnegative')
+    weights = periodic_phase_weights(np.arange(orbit.n) / orbit.n, windows)
+    schedules = [schedule(orbit, mask) for mask in training.visible]
+    observed = np.repeat(training.visible, 2, axis=-1)
+    if observed.sum() < 3 * windows:
+        raise ValueError('Insufficient visible angular observations for phase-window identification')
+
+    def innovations(knots):
+        gains = weights @ knots
+        return predict(orbit, training, gains, schedules=schedules)['standardized'][observed]
+
+    unity = np.ones((windows, 3))
+    reference = innovations(unity)
+    # With fixed covariance schedules, innovations depend affinely on the gains.
+    # Perturb each knot to obtain its exact linear contribution to the residual.
+    basis = np.eye(3 * windows).reshape(-1, windows, 3)
+    sensitivity = np.column_stack([innovations(unity + delta) - reference for delta in basis])
+    difference = np.eye(windows) - np.roll(np.eye(windows), 1, axis=1)
+    penalty = smoothing * np.kron(difference, np.eye(3))
+    result = lsq_linear(np.vstack([sensitivity, penalty]),
+                        np.r_[-reference, np.zeros(3 * windows)], bounds=(-.5, .5))
+    if not result.success:
+        raise RuntimeError(result.message)
+    knots = unity + result.x.reshape(windows, 3)
+    return dict(gains=weights @ knots, knot_gains=knots,
+                knot_phase_deg=360 * np.arange(windows) / windows,
+                windows=windows, smoothing=smoothing,
+                training_cost=float(.5 * np.linalg.norm(innovations(knots))**2),
+                jacobian_singular_values=np.linalg.svd(sensitivity, compute_uv=False))
+
+
 def prediction_scores(orbit, rec, gains):
     p = predict(orbit, rec, gains)
     f = predict(orbit, rec, gains, free_run=True)
@@ -263,6 +315,11 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
     z, P = np.zeros(6), orbit.P0.copy()
     outputs, days = [orbit.output(state, 0.)], [0.]
     burn_day, commands, phases, nav, raw, visibility, covariance = [], [], [], [], [], [], []
+    gains_by_phase = _gain_schedule(orbit, gains)
+
+    def gain_at(k):
+        return gains_by_phase[k % orbit.n]
+
     pending, scheduled, stop_reason = None, None, 'completed requested propagation'
     for k in range(count + int(ends_on_grid)):
         t = k*orbit.dt
@@ -286,7 +343,7 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
             break
         command = np.zeros(3)
         if pending is None and k % planning_stride_steps == 0:
-            plan = physics.plan_burn(orbit, z*orbit.scale, k, gains)
+            plan = physics.plan_burn(orbit, z*orbit.scale, k, gain_at)
             if plan['delay'] >= 0 and np.linalg.norm(plan['command']) > 1e-10:
                 pending, scheduled = plan['command'], k+plan['delay']
         if pending is not None and scheduled == k:
@@ -301,7 +358,7 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
         outputs.extend(orbit.output(x,epoch) for x,epoch in zip(xx,tt))
         days.extend(tt*orbit.cfg['time_unit_s']/86400)
         A, B = orbit.A[k % orbit.n], orbit.B[k % orbit.n]
-        z = A @ z+B @ (np.asarray(gains)*command)
+        z = A @ z+B @ (gain_at(k) * command)
         P = A @ P @ A.T+orbit.Q
         P = (P+P.T)/2
     y, day = np.asarray(outputs), np.asarray(days)

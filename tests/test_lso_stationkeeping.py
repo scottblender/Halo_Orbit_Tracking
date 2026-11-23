@@ -86,3 +86,44 @@ def test_annual_trial_stops_at_requested_horizon_off_the_measurement_grid(orbit,
     truncated = lso.stationkeeping_trial(orbit, np.ones(3), duration_days=duration)
     assert not truncated['summary']['completed']
     assert truncated['summary']['annual_delta_v_m_s'] is None
+
+
+def test_periodic_fit_recovers_synthetic_phase_gain_knots(orbit):
+    knots = np.array([[.92, 1.05, .97], [1.04, .97, 1.09], [1.10, .94, .89], [.96, 1.10, 1.02]])
+    phases = np.arange(orbit.n) / orbit.n
+    gains = lso.periodic_phase_weights(phases, len(knots)) @ knots
+    rng = np.random.default_rng(917)
+    commands = rng.normal(0, .02, (4, orbit.n, 3))
+    mask = np.ones((4, orbit.n + 1, len(orbit.sites)), dtype=bool)
+    blank = np.full((4, orbit.n + 1, 6), np.nan)
+    data = lso.Experiment(commands, blank, blank, np.arange(4),
+                          np.zeros((*mask.shape, 2)), mask,
+                          np.full((*blank.shape[:2], 6, 6), np.nan))
+    for arc, u in enumerate(commands):
+        state = np.zeros(6)
+        for k in range(orbit.n + 1):
+            if k:
+                state = orbit.A[k-1] @ state + orbit.B[k-1] @ (gains[k-1] * u[k-1])
+            nominal, C = orbit.observation_terms(k)
+            data.angles[arc, k] = (nominal.ravel() + C @ state).reshape(-1, 2)
+    result = lso.fit_periodic_greybox(orbit, data, windows=4, smoothing=0)
+    np.testing.assert_allclose(result['knot_gains'], knots, atol=1e-5)
+    weights = lso.periodic_phase_weights(np.array([-.01, .99, 1., 0.]), 4)
+    np.testing.assert_allclose(weights[0], weights[1])
+    np.testing.assert_allclose(weights[2], weights[3])
+    np.testing.assert_allclose(weights.sum(axis=1), 1.)
+    assert weights[1, -1] > 0 and weights[1, 0] > 0
+
+
+def test_periodic_gain_is_used_at_the_executed_burn_phase(orbit, monkeypatch):
+    selected = []
+
+    def plan(_, estimate, k, gain_at):
+        selected.append(gain_at(k + 1))
+        return {'delay': 1, 'command': np.zeros(3)}
+
+    monkeypatch.setattr(lso.physics, 'plan_burn', plan)
+    gains = np.ones((orbit.n, 3))
+    gains[1] = [1.1, .9, 1.05]
+    lso.stationkeeping_trial(orbit, gains, duration_days=1.5 * orbit.dt_s / 86400)
+    np.testing.assert_allclose(selected[0], gains[1])

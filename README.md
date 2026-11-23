@@ -8,7 +8,7 @@ nominal orbit?
 | Notebook | Purpose |
 | --- | --- |
 | [01 — Data and identification](notebooks/01_stationkeeping_identification.ipynb) | LSO-derived directional input/output histories, raw angles and visibility, feedback block diagram, Welch/FRF, stationarity, phase dependence, nonlinearity, stability and up to 24 orbits of uncontrolled propagation |
-| [02 — STM grey box](notebooks/02_stm_greybox_stationkeeping.ipynb) | Raw angular-innovation identification, held-out validation, gap-aware residual/stationarity tests, and LSO-guided station keeping and cumulative annual Δv |
+| [02 — STM grey box](notebooks/02_stm_greybox_stationkeeping.ipynb) | Global and periodic gain fits, held-out prediction and residual comparisons, and paired annual LSO-guided station keeping |
 
 Each figure includes one purpose sentence and one result sentence computed from
 the current run. Notebook 1 uses a 3D Moon-centred orbit view and places its legend outside the plotting axes. Conclusions
@@ -18,7 +18,7 @@ local STM and time-dependent observation geometry.
 The active workflow uses `lso_stationkeeping.py`, `lso_diagnostics.py` and
 `lso_report_plots.py`. It reuses this repository's LSO geometry, angular
 measurements, elevation/range/keep-out masks, dynamics and differential correction.
-The grey-box estimator fits **raw visible angular innovations**, not filtered
+The global baseline uses one gain per axis across the orbit. The periodic variant blends six overlapping phase windows and regularizes adjacent gains, including across phase zero. Both use the same phase-indexed physics matrices and observation geometry. The paired annual trials share the initial departure and noise seed. The grey-box estimator fits **raw visible angular innovations**, not filtered
 states treated as independent measurements. Guidance receives an LSO-derived
 estimate. Truth is used only for sensor simulation and evaluation. Missing angles
 remain missing, and estimates/covariances coast through visibility gaps.

@@ -122,34 +122,51 @@ display(Markdown('**Stability conclusion:** '+('the multiplier outside the unit 
 
 MODEL = [
 ('md', r'''
-# 2. An LSO-informed STM grey box
+# 2. Comparing global and periodic STM grey boxes
 
 The six states are position and velocity departure from the nominal NRHO. In corridor-scaled coordinates,
 
-$$e_{k+1}=A_k e_k+B_k\operatorname{diag}(g)u_k+w_k,\qquad z_{j,k}=h_j(t_k,x_{\rm nom}(t_k))+C_{j,k}e_k+v_{j,k},$$
+$$e_{k+1}=A_k e_k+B_k\operatorname{diag}(g(\phi_k))u_k+w_k,\qquad z_{j,k}=h_j(t_k,x_{\rm nom}(t_k))+C_{j,k}e_k+v_{j,k},$$
 $$\dot\Phi=F(t)\Phi,\quad A_k=J^{-1}\Phi(t_{k+1},t_k)J,\quad C_{j,k}=\left.\frac{\partial h_j}{\partial x}\right|_{x_{\rm nom}(t_k)}J.$$
 
-$z_{j,k}$ contains the two angles from visible LSO $j$, so **$C_{j,k}$ is not the identity**. The measurement noise enters additively after the ideal angle map: $v_{j,k}\sim\mathcal{N}(0,R)$ with $R=\sigma_\theta^2 I_2$ and $\sigma_\theta=1$ arcsec in the synthetic sensor generator. Draws are independent across angle components, sites and epochs, which is a white-noise assumption. No real sensor calibration data are used to justify white or Gaussian noise, and bias or colored noise are not modeled. The innovation tests check this assumption against the synthetic data. Known physics fixes the STM. Training estimates three actuator gains $g$. This is a locally linear, phase-dependent model of the nonlinear orbit/angle system.
+$z_{j,k}$ contains the two angles from visible LSO $j$, so **$C_{j,k}$ is not the identity**. The measurement noise enters additively after the ideal angle map: $v_{j,k}\sim\mathcal{N}(0,R)$ with $R=\sigma_\theta^2 I_2$ and $\sigma_\theta=1$ arcsec in the synthetic sensor generator. Draws are independent across angle components, sites and epochs, which is a white-noise assumption. No real sensor calibration data are used to justify white or Gaussian noise, and bias or colored noise are not modeled. The innovation tests check this assumption against the synthetic data. Known physics fixes the repeatable $A_k$ and $B_k$ along the nominal orbit. The global baseline fits one set of three mean gains. The periodic fit replaces $g$ with $g(\phi_k)$, an interpolation of overlapping phase windows. The last window blends into the first. The simulator uses constant physical gains, so any fitted phase variation represents effective model correction rather than changing actuator hardware.
 '''),
 ('code', SETUP+'''
 orbit,data=sk.restore_study(ROOT,OUT/'data')
-fit=sk.fit_greybox(orbit,data['training']);gains=fit['gains']
-table(['Axis','Estimated gain','Conditional standard error'],[('xyz'[j],f'{gains[j]:.4g}',f"{fit['gain_standard_errors'][j]:.3g}") for j in range(3)])
-print('Angular-innovation sensitivity singular values:',fit['jacobian_singular_values'])
-(OUT/'greybox_fit.json').write_text(json.dumps({k:v.tolist() if isinstance(v,np.ndarray) else v for k,v in fit.items()},indent=2)+'\\n')
+global_fit=sk.fit_greybox(orbit,data['training'])
+fit=sk.fit_periodic_greybox(orbit,data['training'],
+    windows=orbit.settings['periodic_gain_windows'],
+    smoothing=orbit.settings['periodic_gain_smoothing'])
+gains=fit['gains']
+models={'Global gains':global_fit['gains'],'Periodic gains':gains}
+table(['Phase [deg]','X gain','Y gain','Z gain'],
+      [(f'{phase:.0f}',*(f'{value:.4f}' for value in local))
+       for phase,local in zip(fit['knot_phase_deg'],fit['knot_gains'])])
+print('Global gains:',global_fit['gains'])
+
+def save_fit(name, result):
+    values={k:v.tolist() if isinstance(v,np.ndarray) else v for k,v in result.items()}
+    (OUT/name).write_text(json.dumps(values,indent=2)+'\\n')
+
+save_fit('greybox_fit.json',fit)
+save_fit('global_greybox_fit.json',global_fit)
 '''),
 ('md', r'''
 ## Identification and held-out validation
 
 Following Studios 5 and 11, minimize covariance-standardized **raw angular innovations** on training trajectories, updating only when an LSO is visible. No generated full-state observations or saved truth enter the fit. Filtered state histories are correlated outputs, so they support exploratory plots and guidance, not independent-measurement regression.
 
-Validation compares unity and fitted gains. Independent test trajectories assess angular prediction and navigation accuracy. Free propagation uses its initial angular update and then the known commands, with no later measurements. Truth is used only to evaluate state errors.
+Both variants use the same training, validation and test trajectories. Lecture 13 motivates a local approximation when full-record stationarity is doubtful. Here windows are indexed by orbital phase, so training can pool repeated passages through the same phase. Adjacent gains are regularized towards one another, with no test-driven choice of window count. Independent test trajectories assess angular prediction and navigation accuracy. Free propagation uses its initial angular update and then the known commands, with no later measurements. Truth is used only to evaluate state errors.
 '''),
 ('code', '''
-scores={name:sk.prediction_scores(orbit,rec,gains) for name,rec in data.items()}
-unity=sk.prediction_scores(orbit,data['validation'],np.ones(3))
-table(['Dataset / model','Angular RMSE [arcsec]','Navigation position RMSE [km]','Navigation velocity RMSE [m/s]'],[(name,f"{q['angular_innovation_rmse_arcsec']:.3g}",f"{q['navigation']['position_rmse_km']:.3g}",f"{q['navigation']['velocity_rmse_m_s']:.3g}") for name,q in [('Validation: unity gains',unity)]+list(scores.items())])
-(OUT/'prediction_scores.json').write_text(json.dumps(scores,indent=2)+'\\n')
+scores={model:{split:sk.prediction_scores(orbit,rec,model_gains) for split,rec in data.items()}
+        for model,model_gains in models.items()}
+table(['Split','Model','Angular RMSE [arcsec]','Navigation position RMSE [km]','Navigation velocity RMSE [m/s]'],
+      [(split,model,f"{q['angular_innovation_rmse_arcsec']:.3g}",
+        f"{q['navigation']['position_rmse_km']:.3g}",f"{q['navigation']['velocity_rmse_m_s']:.3g}")
+       for model,result in scores.items() for split,q in result.items() if split != 'training'])
+(OUT/'prediction_scores.json').write_text(json.dumps(scores['Periodic gains'],indent=2)+'\\n')
+(OUT/'model_comparison_scores.json').write_text(json.dumps(scores,indent=2)+'\\n')
 test=data['test'];pred=sk.predict(orbit,test,gains);free=sk.predict(orbit,test,gains,free_run=True)
 plots.validation(orbit,test,pred,free,OUT/'figures')
 np.savez_compressed(OUT/'test_predictions.npz',**pred,free_simulation=free['navigation'])
@@ -164,6 +181,12 @@ ADF/KPSS also uses contiguous observed runs, reporting insufficient support expl
 ('code', '''
 residual=ld.residual_report(pred['standardized'],test.u,orbit.settings['residual_lags'])
 plots.residuals(residual,OUT/'figures')
+global_pred=sk.predict(orbit,test,models['Global gains'])
+global_residual=ld.residual_report(global_pred['standardized'],test.u,orbit.settings['residual_lags'])
+table(['Model','Ljung–Box rejects','Eligible runs','Input–innovation p'],
+      [(label,int(np.nansum(q['ljung_box_holm_p']<orbit.settings['alpha'])),
+        q['eligible_whiteness_tests'],f"{q['ccf_global_p']:.3g}")
+       for label,q in [('Global gains',global_residual),('Periodic gains',residual)]])
 stationarity_rows=ld.stationarity_rows(pred['standardized'])
 def fmt(p): return 'insufficient data' if p is None else f'{p:.3g}'
 table(['Angular channel','Contiguous samples','ADF p','KPSS p','Joint reading'],[(r['channel'],r['contiguous_samples'],fmt(r['adf_p']),fmt(r['kpss_p']),r['reading']) for r in stationarity_rows])
@@ -176,14 +199,21 @@ np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items()
 
 Guidance uses only the LSO-derived departure estimate, with state updates at every measurement sample and planner calls at every measurement sample (about 1.5 hours). Candidate burns are checked by nonlinear propagation. The one-year run reports sampled corridor performance and the cumulative commanded Δv from the actual simulated impulses.
 
-This is one simulated year, not a continuous-time guarantee or a population success rate. A failure can arise from navigation, prediction or the single-impulse planner.
+Both controllers use the same initial departure, noise seed, measurement cadence and nonlinear validation. The planner and filter apply the local gains at the actual burn phase. These are paired outcomes from one simulated year, with completion reported separately from corridor compliance. A failure can arise from navigation, prediction or the single-impulse planner.
 '''),
 ('code', '''
-trial=sk.stationkeeping_trial(
-    orbit,gains,
+trials={model:sk.stationkeeping_trial(
+    orbit,model_gains,
     duration_days=orbit.settings['annual_horizon_days'],
     planning_stride_steps=orbit.settings['annual_planning_stride_steps'],
     stop_on_departure_cutoff=False)
+    for model,model_gains in models.items()}
+trial=trials['Periodic gains']
+comparison={model:result['summary'] for model,result in trials.items()}
+(OUT/'annual_model_comparison.json').write_text(json.dumps(comparison,indent=2)+'\\n')
+table(['Model','Completed','First exit [day]','Annual commanded Δv [m/s]'],
+      [(model,q['completed'],q['first_sampled_exit_day'],q['annual_delta_v_m_s'])
+       for model,q in comparison.items()])
 if (OUT/'uncontrolled.npz').exists():
     with np.load(OUT/'uncontrolled.npz') as z: no_day,no_y=z['day'],z['output']
 else: no_day,no_y,_=sk.uncontrolled(orbit)
@@ -200,7 +230,7 @@ display(Markdown('**Station-keeping conclusion:** '+('both required norms remain
 ('md', r'''
 ## Next model discussion
 
-The physical basis and measured phase dependence support a periodic STM starting model, not a globally LTI one. Review LSO availability, gain uncertainty, raw angular residuals and navigation error before selecting a local OE/BJ model or periodic parameter basis (Studio 13). NARX remains deferred. Improving navigation or the burn planner may matter more than increasing black-box complexity.
+Stationarity checks describe the records, while the phase-dependent impulse sensitivity motivates the periodic model structure. Held-out prediction, residual whiteness and annual corridor performance determine what the additional local gains are worth. Review LSO availability, gain uncertainty, raw angular residuals and navigation error before selecting a local OE/BJ model or periodic parameter basis (Studio 13). NARX remains deferred. Improving navigation or the burn planner may matter more than increasing black-box complexity.
 ''')]
 
 
