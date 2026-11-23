@@ -243,7 +243,11 @@ The mean stayed inside both limits at every sampled epoch. **9 of 20 trials (45%
 
 Across all completed trials, annual commanded Δv averaged 6.87 m/s (range 6.48–7.38 m/s), with an average of 426 burns.
 
-[Benchmark run and downloadable plot and trial data](https://github.com/scottblender/Halo_Orbit_Tracking/actions/runs/45171529580)
+[Benchmark run and downloadable trial data](https://github.com/scottblender/Halo_Orbit_Tracking/actions/runs/45171529580)
+'''),
+('code', '''
+from IPython.display import Image
+display(Image(filename=ROOT / 'docs/figures/stationkeeping_mc.png', width=1000, alt='Annual Monte Carlo position and velocity errors with corridor limits'))
 '''),
 ('md', r'''
 ## Next model discussion
