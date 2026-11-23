@@ -1,0 +1,92 @@
+name: Paired annual station-keeping Monte Carlo
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/paired-stationkeeping-monte-carlo.yml
+      - scripts/run_paired_stationkeeping_mc.py
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: src
+  OPENBLAS_NUM_THREADS: '1'
+  OMP_NUM_THREADS: '1'
+  MPLBACKEND: Agg
+
+jobs:
+  fit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy scipy
+      - run: python scripts/run_paired_stationkeeping_mc.py fit paired-gains.npz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paired-gains
+          path: paired-gains.npz
+          if-no-files-found: error
+
+  trial:
+    needs: fit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        model: [global, periodic]
+        trial: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy scipy
+      - uses: actions/download-artifact@v4
+        with:
+          name: paired-gains
+      - env:
+          MODEL: ${{ matrix.model }}
+          TRIAL: ${{ matrix.trial }}
+        run: python scripts/run_paired_stationkeeping_mc.py trial "$MODEL" "$TRIAL" paired-gains.npz "$MODEL-$TRIAL.npz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paired-trial-${{ matrix.model }}-${{ matrix.trial }}
+          path: ${{ matrix.model }}-${{ matrix.trial }}.npz
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    needs: trial
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy scipy matplotlib
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: paired-trial-*
+          merge-multiple: true
+          path: trials
+      - run: python scripts/run_paired_stationkeeping_mc.py aggregate trials benchmark-results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paired-monte-carlo-results
+          path: benchmark-results/
+          if-no-files-found: error

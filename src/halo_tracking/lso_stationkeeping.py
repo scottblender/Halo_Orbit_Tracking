@@ -335,7 +335,7 @@ def _navigation_propagate(orbit, k, z, P, command, gains, mode):
 
 def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
                         planning_stride_steps=1, stop_on_departure_cutoff=True, *,
-                        navigation='extended'):
+                        navigation='extended', initial_departure=None):
     """Simulate LSO-guided nonlinear station keeping for a fixed requested span.
 
     State estimates use visible noisy angles only. The longer annual case can
@@ -361,7 +361,12 @@ def stationkeeping_trial(orbit, gains, seed=26960, duration_days=None,
     ends_on_grid = np.isclose(requested_end, count * orbit.dt, rtol=0, atol=1e-12)
     if planning_stride_steps < 1:
         raise ValueError('planning_stride_steps must be at least 1')
-    state = orbit.state(np.array([.03,-.02,.01,.0003,-.0002,.0001]), 0.)
+    if initial_departure is None:
+        initial_departure = [.03, -.02, .01, .0003, -.0002, .0001]
+    departure = np.asarray(initial_departure, dtype=float)
+    if departure.shape != (6,) or not np.isfinite(departure).all():
+        raise ValueError('initial_departure must contain six finite position and velocity components')
+    state = orbit.state(departure, 0.)
     z, P = np.zeros(6), orbit.P0.copy()
     outputs, days = [orbit.output(state, 0.)], [0.]
     burn_day, commands, phases, nav, raw, visibility, covariance = [], [], [], [], [], [], []
