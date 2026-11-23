@@ -230,6 +230,22 @@ display(Markdown(f'**Noise-model conclusion:** {rejects}/{residual["eligible_whi
 display(Markdown('**Station-keeping conclusion:** '+('both required norms remain inside their limits at all evaluated samples of the completed run.' if summary['completed'] and summary['all_evaluated_samples_inside'] else f'the extended-navigation controller does not establish the full corridor requirement, with observed peaks of {summary["maximum_position_km"]:.3g} km and {summary["maximum_velocity_m_s"]:.3g} m/s.')))
 '''),
 ('md', r'''
+## How often does the single-burn controller stay inside the corridor?
+
+The annual Monte Carlo benchmark ran the periodic STM and extended navigation filter for 20 trials of 365.25 days. It varied the initial position and velocity errors and lunar surface observer angle noise. Initial errors had per-axis standard deviations of 30 m and 0.3 mm/s, and angle noise had a standard deviation of 1 arcsecond. The starting orbital phase, simulated dynamics and actuator gains were fixed.
+
+| Error magnitude | Corridor limit | Peak of pointwise mean | Worst individual peak |
+| --- | ---: | ---: | ---: |
+| Position | 10 km | 2.545 km | 4.231 km |
+| Velocity | 0.100 m/s | 0.0682 m/s | 0.1383 m/s |
+
+The mean stayed inside both limits at every sampled epoch. **9 of 20 trials (45%)** stayed inside both limits for the full year. The other 11 trials crossed the velocity limit, with the earliest observed exit on day 35.4. The average uses the magnitude of each trial’s error at each epoch. Mean compliance and full-year trial compliance answer different questions.
+
+Across all completed trials, annual commanded Δv averaged 6.87 m/s (range 6.48–7.38 m/s), with an average of 426 burns.
+
+[Benchmark run and downloadable plot and trial data](https://github.com/scottblender/Halo_Orbit_Tracking/actions/runs/45171529580)
+'''),
+('md', r'''
 ## Next model discussion
 
 Stationarity checks describe the records, while the phase-dependent impulse sensitivity motivates the periodic model structure. Held-out prediction, residual whiteness and annual corridor performance determine what the additional local gains are worth. Review LSO availability, gain uncertainty, raw angular residuals and navigation error before selecting a local OE/BJ model or periodic parameter basis (Studio 13). NARX remains deferred. Improving navigation or the burn planner may matter more than increasing black-box complexity.
