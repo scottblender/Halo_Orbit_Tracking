@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from halo_tracking import lso_stationkeeping as lso
 from halo_tracking.stationkeeping import load_settings
-from halo_tracking.lso_diagnostics import longest_run, residual_report
+from halo_tracking.lso_diagnostics import ANGULAR_STATIONARITY_MIN_SAMPLES, longest_run, residual_report
 
 
 @pytest.fixture(scope='module')
@@ -20,6 +20,17 @@ def test_lso_stream_has_real_visibility_and_angular_noise(orbit):
     assert np.isnan(rec.angles[~rec.visible]).all()
     assert np.isfinite(rec.y).all()  # coasts through gaps, not fabricated angles
     assert np.linalg.eigvalsh(rec.covariance).min()>-1e-9
+
+
+def test_configured_lso_network_supports_contiguous_angular_diagnostics():
+    orbit = lso.OrbitModel(*load_settings())
+    rec = lso.make_experiment(orbit, 1, orbit.settings['seed'] + 2000)
+    visible = rec.visible[0]
+    assert np.all(visible.any(axis=1))
+    for j in (0, 1):
+        assert np.any(visible[:, j] & ~visible[:, 2])
+    for angles in rec.angles[0].reshape(len(visible), -1).T:
+        assert len(longest_run(angles)) >= ANGULAR_STATIONARITY_MIN_SAMPLES
 
 
 def test_gains_fit_angles_without_reading_state_estimates_or_truth(orbit):

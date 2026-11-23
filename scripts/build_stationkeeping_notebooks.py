@@ -48,6 +48,9 @@ orbit,data=sk.prepare_study(ROOT,OUT/'data')
 training=data['training']
 table(['Split','Independent trajectories','Seed range'],[(n,len(r.seeds),f'{r.seeds[0]}–{r.seeds[-1]}') for n,r in data.items()])
 print(f'LSO angle noise: {orbit.cfg["measurement"]["angle_sigma_arcsec"]:g} arcsec. Uniform cadence: {orbit.dt_s/3600:.2f} hour.')
+table(['Site','Latitude [deg]','East longitude [deg]'],
+      [(site['site']['name'],site['site']['latitude_deg'],site['site']['longitude_east_deg'])
+       for site in orbit.sites])
 plots.inputs_outputs(orbit,training,OUT/'figures')
 '''),
 ('md', r'''
@@ -167,8 +170,11 @@ table(['Split','Model','Angular RMSE [arcsec]','Navigation position RMSE [km]','
        for model,result in scores.items() for split,q in result.items() if split != 'training'])
 (OUT/'prediction_scores.json').write_text(json.dumps(scores['Periodic gains'],indent=2)+'\\n')
 (OUT/'model_comparison_scores.json').write_text(json.dumps(scores,indent=2)+'\\n')
-test=data['test'];pred=sk.predict(orbit,test,gains);free=sk.predict(orbit,test,gains,free_run=True)
-plots.validation(orbit,test,pred,free,OUT/'figures')
+test=data['test']
+predictions={label:(sk.predict(orbit,test,local),sk.predict(orbit,test,local,free_run=True))
+             for label,local in models.items()}
+pred,free=predictions['Periodic gains']
+plots.compare_heldout(orbit,test,predictions,OUT/'figures')
 np.savez_compressed(OUT/'test_predictions.npz',**pred,free_simulation=free['navigation'])
 '''),
 ('md', r'''
@@ -179,20 +185,22 @@ Use standardized angular innovations with actual time lags and visibility gaps i
 ADF and KPSS use the longest uninterrupted observed run for each channel. The table reports the channels that support testing. A coverage summary reports any channels left out. Residual whiteness checks the adequacy of the assumed noise model. Residual–input correlation checks whether commanded impulses remain related to the prediction error. Controller performance is evaluated separately using the corridor limits.
 '''),
 ('code', '''
-residual=ld.residual_report(pred['standardized'],test.u,orbit.settings['residual_lags'])
-plots.residuals(residual,OUT/'figures')
-global_pred=sk.predict(orbit,test,models['Global gains'])
-global_residual=ld.residual_report(global_pred['standardized'],test.u,orbit.settings['residual_lags'])
+reports={label:ld.residual_report(updated['standardized'],test.u,orbit.settings['residual_lags'])
+         for label,(updated,_) in predictions.items()}
+residual=reports['Periodic gains']
+plots.compare_angular_residuals(reports,OUT/'figures')
 table(['Model','Ljung–Box rejects','Eligible runs','Input–innovation p'],
       [(label,int(np.nansum(q['ljung_box_holm_p']<orbit.settings['alpha'])),
         q['eligible_whiteness_tests'],f"{q['ccf_global_p']:.3g}")
-       for label,q in [('Global gains',global_residual),('Periodic gains',residual)]])
+       for label,q in reports.items()])
 stationarity_rows=ld.stationarity_rows(pred['standardized'])
 tested=[r for r in stationarity_rows if r['adf_p'] is not None and r['kpss_p'] is not None]
 if tested:
     table(['Angular channel','Contiguous samples','ADF p','KPSS p','Joint reading'],
           [(r['channel'],r['contiguous_samples'],f"{r['adf_p']:.3g}",
             f"{r['kpss_p']:.3g}",r['reading']) for r in tested])
+    if len(tested)==len(stationarity_rows):
+        display(Markdown(f'**Angular stationarity coverage:** All {len(tested)} channels meet the contiguous-sample requirement. The table reports the periodic fit.'))
 skipped=[r for r in stationarity_rows if r['adf_p'] is None or r['kpss_p'] is None]
 if skipped:
     sites=', '.join(sorted({r['channel'].rsplit(' ',1)[0] for r in skipped}))
@@ -210,7 +218,7 @@ np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items()
 
 Guidance uses only the LSO-derived departure estimate, with state updates at every measurement sample and planner calls at every measurement sample (about 1.5 hours). Candidate burns are checked by nonlinear propagation. The one-year run reports sampled corridor performance and the cumulative commanded Δv from the actual simulated impulses.
 
-Both runs use the revised extended navigation filter and the same single-burn planner, which targets 30% of the corridor limits. The filter propagates the estimated state with nonlinear dynamics, recomputes its local STM and visible angle Jacobians, and accounts for impulse uncertainty. The initial departure, angle-noise seed and measurement cadence are fixed. The comparison isolates the choice of a global or periodic actuator gain fit for this simulated year. The follow-up plots show the periodic-gain configuration evaluated in the Monte Carlo benchmark.
+Both runs use the revised extended navigation filter and the same single-burn planner, which targets 30% of the corridor limits. The filter propagates the estimated state with nonlinear dynamics, recomputes its local STM and visible angle Jacobians, and accounts for impulse uncertainty. The initial departure, angle-noise seed and measurement cadence are fixed. The side-by-side plots isolate the choice of a global or periodic actuator gain fit for this simulated year.
 '''),
 ('code', '''
 trials={model:sk.stationkeeping_trial(
@@ -231,11 +239,7 @@ table(['Gains with revised filter','Completed','First exit [day]','Peak position
         annual_metric(q['maximum_position_km']),annual_metric(q['maximum_velocity_m_s']),
         q['burns'],annual_metric(q['annual_delta_v_m_s']))
        for model,q in comparison.items()])
-if (OUT/'uncontrolled.npz').exists():
-    with np.load(OUT/'uncontrolled.npz') as z: no_day,no_y=z['day'],z['output']
-else: no_day,no_y,_=sk.uncontrolled(orbit)
-plots.controlled(orbit,trial,no_day,no_y,OUT/'figures')
-plots.annual_delta_v(trial,OUT/'figures')
+plots.compare_annual(orbit,trials,OUT/'figures')
 summary=trial['summary']
 table(['Metric','Observed value'],[(k,summary[k]) for k in ('completed','requested_duration_days','last_day','planning_stride_steps','planning_margin','maximum_position_km','maximum_velocity_m_s','all_evaluated_samples_inside','first_sampled_exit_day','burns','total_commanded_delta_v_m_s','annual_delta_v_m_s','visible_epoch_fraction')])
 np.savez_compressed(OUT/'closed_loop.npz',**{k:v for k,v in trial.items() if k!='summary'})
@@ -245,26 +249,6 @@ display(Markdown(f'**Noise-model conclusion:** {rejects}/{residual["eligible_whi
 compliant=[model for model,q in comparison.items() if q['completed'] and q['all_evaluated_samples_inside']]
 status = ', '.join(compliant) if compliant else 'Neither gain model'
 display(Markdown(f'**Full-year corridor compliance:** {status}. This is a paired comparison for one starting departure and one observation-noise seed.'))
-'''),
-('md', r'''
-## How often does the single-burn controller stay inside the corridor?
-
-The annual Monte Carlo benchmark ran the periodic STM and extended navigation filter for 20 trials of 365.25 days. It varied the initial position and velocity errors and lunar surface observer angle noise. Initial errors had per-axis standard deviations of 30 m and 0.3 mm/s, and angle noise had a standard deviation of 1 arcsecond. The starting orbital phase, simulated dynamics and actuator gains were fixed.
-
-| Error magnitude | Corridor limit | Peak of pointwise mean | Worst individual peak |
-| --- | ---: | ---: | ---: |
-| Position | 10 km | 2.545 km | 4.231 km |
-| Velocity | 0.100 m/s | 0.0682 m/s | 0.1383 m/s |
-
-The mean stayed inside both limits at every sampled epoch. **9 of 20 trials (45%)** stayed inside both limits for the full year. The other 11 trials crossed the velocity limit, with the earliest observed exit on day 35.4. The average uses the magnitude of each trial’s error at each epoch. Mean compliance and full-year trial compliance answer different questions.
-
-Across all completed trials, annual commanded Δv averaged 6.87 m/s (range 6.48–7.38 m/s), with an average of 426 burns.
-
-The plot shows the mean and the middle 90% of trial errors at each sampled time. The dashed lines mark the corridor limits. The velocity panel shows why a mean below the limit can coexist with individual violations.
-'''),
-('code', '''
-from IPython.display import Image
-display(Image(filename=ROOT / 'docs/figures/stationkeeping_mc.png', width=1000, alt='Annual Monte Carlo position and velocity errors with corridor limits'))
 '''),
 ('md', r'''
 ## Next model discussion

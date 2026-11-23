@@ -27,6 +27,8 @@ class Experiment(physics.Experiment):
 class OrbitModel(physics.OrbitModel):
     def __init__(self, cfg, settings):
         super().__init__(cfg, settings)
+        if 'lso_sensor_sites' in settings:
+            self.cfg['sensors'] = settings['lso_sensor_sites']
         # Uniform orbit-phase sampling for this experiment, explicitly recorded.
         self.cfg['simulation']['cadence_s'] = self.dt_s
         self.sites = sensor_configs(self.cfg)

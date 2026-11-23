@@ -12,6 +12,11 @@
   "navigation_velocity_sigma_m_s": 0.00003,
   "excitation_sigma_m_s": 0.003,
   "measurement_source": "lso_angles",
+  "lso_sensor_sites": [
+    {"name": "LSO 1", "latitude_deg": 0, "longitude_east_deg": 230},
+    {"name": "LSO 2", "latitude_deg": 15, "longitude_east_deg": 100},
+    {"name": "LSO 3", "latitude_deg": -85, "longitude_east_deg": 90}
+  ],
   "lso_prior_position_sigma_km": 1.0,
   "lso_prior_velocity_sigma_m_s": 0.01,
   "uncontrolled_periods": 24,

@@ -322,3 +322,75 @@ def annual_delta_v(trial,out):
     finish(fig,out,'11_cumulative_delta_v',
            'The curve sums the magnitudes of commanded impulses over the simulated trajectory, so it reports accumulated Δv rather than a linearized yearly extrapolation.',
            result)
+
+
+def compare_heldout(orbit, record, predictions, out):
+    """Place the two fitted models on common held-out error axes."""
+    day = np.arange(record.truth.shape[1])*orbit.dt_s/86400
+    fig, axes = plt.subplots(2, len(predictions), figsize=(13, 8), sharex=True, sharey='row', squeeze=False)
+    for col, (name, (updated, free)) in enumerate(predictions.items()):
+        axes[0, col].set_title(name)
+        for row, (part, label) in enumerate(((slice(0, 3), 'Position RMSE [km]'),
+                                             (slice(3, 6), 'Velocity RMSE [m/s]'))):
+            ax = axes[row, col]
+            for estimate, color, label_curve in ((updated, BLUE, 'LSO updates'),
+                                                  (free, RED, 'Free propagation')):
+                delta = estimate['navigation'][:, :, part] - record.truth[:, :, part]
+                ax.plot(day, np.sqrt(np.mean(np.sum(delta**2, axis=-1), axis=0)),
+                        color=color, label=label_curve)
+            if col == 0:
+                ax.set_ylabel(label)
+            ax.grid(alpha=.25)
+        axes[-1, col].set_xlabel('Elapsed time [day]')
+    axes[0, 0].legend(fontsize=9)
+    finish(fig, out, '08_heldout_lso_validation',
+           'Shared scales compare held-out prediction errors for the same trajectories.',
+           'The blue traces show how LSO updates change the state errors for each fitted gain model.')
+
+
+def compare_angular_residuals(reports, out):
+    fig, axes = plt.subplots(1, len(reports), figsize=(13, 5), sharey=True, squeeze=False)
+    results = []
+    for ax, (name, report) in zip(axes[0], reports.items()):
+        for c, channel in enumerate(report['acf'].T):
+            ax.plot(np.arange(1, report['lags']+1), channel,
+                    label=f'LSO {c//2+1} '+('α' if c%2==0 else 'δ'))
+        ax.axhline(0, color='grey', lw=.7)
+        ax.set(title=name, xlabel='Actual lag [samples]')
+        rejects = int(np.nansum(report['ljung_box_holm_p'] < .05))
+        results.append(f'{name} reject whiteness in {rejects} of {report["eligible_whiteness_tests"]} eligible runs')
+    axes[0, 0].set_ylabel('Angular innovation autocorrelation')
+    axes[0, 0].legend(fontsize=9, ncol=2)
+    finish(fig, out, '09_optical_innovation_checks',
+           'Common lag and correlation scales compare innovation autocorrelation while preserving gaps.',
+           '. '.join(results)+'.')
+
+
+def compare_annual(orbit, trials, out):
+    fig, axes = plt.subplots(3, len(trials), figsize=(13, 10), sharex=True, sharey='row', squeeze=False)
+    results = []
+    for col, (name, trial) in enumerate(trials.items()):
+        axes[0, col].set_title(name)
+        q = trial['summary']
+        for row, (part, label, bound) in enumerate((
+                (slice(0, 3), 'Position departure [km]', orbit.settings['position_limit_km']),
+                (slice(3, 6), 'Velocity departure [m/s]', orbit.settings['velocity_limit_m_s']))):
+            ax = axes[row, col]
+            ax.plot(trial['day'], np.linalg.norm(trial['output'][:, part], axis=1), color=BLUE)
+            ax.axhline(bound, color=RED, ls='--', label='Corridor limit')
+            if col == 0:
+                ax.set_ylabel(label)
+        dv = np.r_[0., np.cumsum(np.linalg.norm(trial['commands'], axis=1))]
+        ax = axes[-1, col]
+        ax.step(np.r_[0., trial['burn_day'], q['last_day']], np.r_[dv, dv[-1]], where='post', color=BLUE)
+        ax.set_xlabel('Elapsed time [day]')
+        if col == 0:
+            ax.set_ylabel('Cumulative commanded Δv [m/s]')
+        outcome = 'stayed inside both limits' if q['completed'] and q['all_evaluated_samples_inside'] else 'did not meet the full-year corridor'
+        results.append(f'{name} {outcome} and commanded {dv[-1]:.3g} m/s')
+    for ax in axes.flat:
+        ax.grid(alpha=.25)
+    axes[0, 0].legend(fontsize=9)
+    finish(fig, out, '10_lso_stationkeeping_corridor',
+           'Compare true departures and accumulated commands with the same filter, planner and starting conditions.',
+           '. '.join(results)+'.')
