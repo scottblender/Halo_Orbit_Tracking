@@ -34,35 +34,7 @@ jobs:
           path: benchmark-trials
           github-token: ${{ github.token }}
           run-id: 45108736417
-      - name: Validate grid agreement and aggregate trials
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          import numpy as np
-
-          source = Path("scripts/run_single_burn_monte_carlo.py")
-          original = "np.array_equal(grid, day)"
-          aligned = "(grid.shape == day.shape and np.allclose(grid, day, rtol=0, atol=1e-5))"
-          code = source.read_text()
-          assert code.count(original) == 1
-          source.write_text(code.replace(original, aligned))
-
-          paths = sorted(Path("benchmark-trials").glob("trial-*.npz"))
-          grid = None
-          worst = 0.0
-          for path in paths:
-              with np.load(path) as data:
-                  day = data["day"]
-              if grid is None:
-                  grid = day
-              assert grid.shape == day.shape, (path, grid.shape, day.shape)
-              assert np.array_equal(np.diff(grid) == 0, np.diff(day) == 0), path
-              worst = max(worst, np.max(np.abs(grid - day)))
-          print(f"Largest timestamp difference across matched samples: {worst:.12g} days")
-          assert worst <= 1e-5, worst
-          PY
-          python scripts/run_single_burn_monte_carlo.py --aggregate benchmark-trials
+      - run: python scripts/run_single_burn_monte_carlo.py --aggregate benchmark-trials
       - uses: actions/upload-artifact@v4
         with:
           name: single-burn-monte-carlo-results
