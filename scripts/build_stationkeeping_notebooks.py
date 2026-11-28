@@ -214,14 +214,127 @@ display(Markdown('**Stability conclusion:** '+('the multiplier outside the unit 
 
 MODEL = [
 ('md', r'''
-# 2. Comparing global and periodic STM grey boxes
+# 2. Can lunar angle measurements support halo-orbit station-keeping?
 
-The six states are position and velocity departure from the nominal NRHO. In corridor-scaled coordinates,
+Three simulated **lunar surface observatories (LSOs)** track a spacecraft in a near-rectilinear halo orbit (NRHO). Each visible LSO reports two line-of-sight angles: right ascension ($\alpha$) and declination ($\delta$). The estimator combines these observations with past burn commands to infer the spacecraft's **position and velocity departure** from the reference orbit. The planner uses that estimate to choose the timing and three-axis velocity change ($\Delta v$) of a corrective burn. The corridor allows up to **10 km** of position departure and **0.1 m/s** of velocity departure.
 
-$$e_{k+1}=A_k e_k+B_k\operatorname{diag}(g(\phi_k))u_k+w_k,\qquad z_{j,k}=h_j(t_k,x_{\rm nom}(t_k))+C_{j,k}e_k+v_{j,k},$$
-$$\dot\Phi=F(t)\Phi,\quad A_k=J^{-1}\Phi(t_{k+1},t_k)J,\quad C_{j,k}=\left.\frac{\partial h_j}{\partial x}\right|_{x_{\rm nom}(t_k)}J.$$
+### Where the command and noise enter
 
-$z_{j,k}$ contains the two angles from visible LSO $j$, so **$C_{j,k}$ is not the identity**. The measurement noise enters additively after the ideal angle map: $v_{j,k}\sim\mathcal{N}(0,R)$ with $R=\sigma_\theta^2 I_2$ and $\sigma_\theta=1$ arcsec in the synthetic sensor generator. Draws are independent across angle components, sites and epochs, which is a white-noise assumption. No real sensor calibration data are used to justify white or Gaussian noise, and bias or colored noise are not modeled. The innovation tests check this assumption against the synthetic data. Known physics fixes the repeatable $A_k$ and $B_k$ along the nominal orbit. The global baseline fits one set of three mean gains. The periodic fit replaces $g$ with $g(\phi_k)$, an interpolation of overlapping phase windows. The last window blends into the first. The simulator uses constant physical gains, so any fitted phase variation represents effective model correction rather than changing actuator hardware.
+- **Burn path ($G$).** The commanded burn $u_k$ changes velocity through actuator gains $g(\phi_k)$. Gravity propagates the resulting departure $e$ and the LSO geometry maps it to angles. The LSO measurement at epoch $k$ comes before the burn at $k$, so the first affected sampled angle is at $k+1$.
+- **Noise path ($H$).** The simulator adds independent Gaussian sensor noise ($1$ arcsec standard deviation) to each ideal angle and then applies the visibility mask. The filter also allows state prediction uncertainty through $Q$, including burn uncertainty in the annual extended filter. A state disturbance can propagate into future angles, even when the sensor noise itself is white.
+
+$$
+e_{k+1}=A_k e_k+B_k\operatorname{diag}(g(\phi_k))u_k+w_k,\qquad
+z_{j,k}-\bar z_{j,k}\approx C_{j,k}e_k+v_{j,k}.
+$$
+
+$A_k$ is the state-transition matrix (STM) that propagates a small departure for one sample. $B_k$ maps the burn through that step. $C_{j,k}$ is the local slope of the sightline angles with respect to the departure. The filter uses only its visible rows. The nonlinear simulation supplies the spacecraft truth for scoring and generating synthetic observations. The fit uses the measured angles and commands. A grey box is appropriate because the orbit and sensor geometry give $A_k$, $B_k$ and $C_{j,k}$ directly, leaving the actuator gains to be estimated from data.
+'''),
+('md', r'''
+## 1. Are the measured angles stationary?
+
+First subtract the angle predicted on the reference orbit. This accounts for the nominal sightline motion and leaves the **measured angle offset**, which still contains spacecraft departure and sensor noise. We use the longest uninterrupted test run for each angle and print its trajectory seed and length. We also compare means and variances across four subsegments with correlation-aware bands, as in Studio 6. A flag counts a subsegment outside the approximate 95% band around the segment average.
+
+At the 5% level, **ADF** tests a unit-root null and **KPSS** tests a constant-level stationarity null. ADF rejection plus KPSS non-rejection supports level stationarity for that run. If both reject, some behavior departs from the simple level-stationary model even though ADF rejects a unit root. The tests describe these observed records. The phase dependence of the spacecraft dynamics is a separate question.
+'''),
+('code', SETUP+'''
+orbit,data=sk.restore_study(ROOT,OUT/'data')
+test = data['test']
+alpha = orbit.settings['alpha']
+offsets = sk.measured_angle_offsets(orbit, test)
+angle_rows = ld.stationarity_rows(offsets)
+
+def test_p(value):
+    return '—' if value is None else f'{value:.3g}'
+
+table(['Measured offset','Test seed','Consecutive samples','ADF p','KPSS p*',
+       'Mean flags / 4','Variance flags / 4','Reading'],
+      [(r['channel'],test.seeds[r['arc']],r['contiguous_samples'],
+        test_p(r['adf_p']),test_p(r['kpss_p']),r.get('mean_flags','—'),
+        r.get('variance_flags','—'),r['reading']) for r in angle_rows])
+print('* KPSS reports table bounds when the p-value falls outside its tabulation.')
+readings = {
+    'supports level stationarity': 'The run supports a constant level by ADF and KPSS. Check the segment flags for changes these two tests may miss.',
+    'conflicting tests': 'ADF rejects a unit root and KPSS rejects level stationarity. A model with a constant mean over this run is questionable.',
+    'evidence against level stationarity': 'KPSS rejects a constant level and ADF cannot rule out a unit root. Treat a constant level over this run as unsupported.',
+    'inconclusive / low power': 'Neither test rejects. The run gives too little evidence to decide whether a constant level is reasonable.',
+    'insufficient contiguous observations': 'Visibility leaves too few consecutive angles for these tests.'
+}
+for r in angle_rows:
+    name, angle = r['channel'].rsplit(' ',1)
+    flags = ''
+    if r.get('mean_flags', 0) or r.get('variance_flags', 0):
+        flags = (f" The segment check flags {r['mean_flags']} means and "
+                 f"{r['variance_flags']} variances out of four.")
+    display(Markdown(f"**{name} {angle} ({'declination' if angle == 'delta' else 'right ascension'}).** "
+                     + readings[r['reading']] + flags))
+(OUT/'measured_angle_stationarity.json').write_text(json.dumps(angle_rows,indent=2)+'\\n')
+'''),
+('md', r'''
+## 2. How does a burn change the measured angles?
+
+$G$ is a **phase-dependent** command-to-angle map. For a burn at epoch $k$, the first-sample map is $C_{k+1}B_k\operatorname{diag}(g_k)$. At later samples, the intervening STMs propagate that same departure before the observation map acts. The table compares the ideal responses at several equally spaced burn phases. An LSO supplies those angles to the filter only when visible.
+
+The eigenvalues of the product of STMs over one complete orbit are **Floquet multipliers**. They describe the modes that grow, decay, or oscillate from orbit to orbit. Both gain fits share these open-loop modes because the fitted gains appear in $B_k\operatorname{diag}(g_k)$, while the homogeneous dynamics depend on $A_k$. A single set of LTI transfer-function poles and zeros would require time-invariant channels. A lifted periodic input–output zero analysis would also require specifying a repeating measurement schedule and the input/output channels, so this study reports the physical modes and the phase-dependent response directly.
+'''),
+('code', '''
+from halo_tracking.measurements import ARCSEC
+
+horizon = orbit.settings['horizon_steps']
+burn_phases = np.arange(4) * orbit.n // 4
+response_rows = []
+for k in burn_phases:
+    response = orbit.B[k] * 1e-3  # unit test input of 1 mm/s on each axis
+    _, c_next = orbit.observation_terms(k + 1)
+    first = np.linalg.norm(c_next @ response) / ARCSEC
+    for j in range(1, horizon):
+        response = orbit.A[(k+j) % orbit.n] @ response
+    _, c_end = orbit.observation_terms(k + horizon)
+    last = np.linalg.norm(c_end @ response) / ARCSEC
+    response_rows.append((360*k/orbit.n, first, last))
+table(['Burn phase [deg]','First sample [arcsec]',f'Sample +{horizon} [arcsec]'],
+      [(f'{p:.0f}',f'{a:.3f}',f'{b:.3f}') for p,a,b in response_rows])
+display(Markdown('Each value combines the ideal six-angle responses to three separate 1 mm/s '
+                 'axis burns using unit actuator gains. The change across rows shows that '
+                 'the same commanded burn can yield different angles at different orbit phases.'))
+monodromy = np.eye(6)
+for transition in orbit.A:
+    monodromy = transition @ monodromy
+modes = sorted(np.linalg.eigvals(monodromy),key=abs,reverse=True)
+table(['Mode','Multiplier','Magnitude','Phase [deg/orbit]'],
+      [(i,f'{m:.5g}',f'{abs(m):.5g}',f'{np.angle(m,deg=True):.3g}')
+       for i,m in enumerate(modes,1)])
+display(Markdown(f'**Open-loop stability.** The dominant mode grows by about {abs(modes[0]):.3g}× '
+                 'per orbit in the local model. This growth motivates corrective burns.'))
+(OUT/'phase_response.json').write_text(json.dumps(dict(
+    response=response_rows, multipliers=[[m.real,m.imag] for m in modes]),indent=2)+'\\n')
+'''),
+('md', r'''
+## Welch and FRF checks on the training commands
+
+The Welch estimate below uses the known training commands and the reconstructed position from the baseline LSO filter. It checks how much frequency resolution and command-to-estimate coherence the record provides. The estimated FRF includes the filter and samples from different orbital phases. Section 2 computes the physical phase-dependent command-to-angle map. The held-out residual section checks $G$ and $H$ using measured angles.
+'''),
+('code', '''
+training = data['training']
+welch = {}
+for L in sorted({orbit.settings['welch_length'], orbit.n}):
+    welch[L] = sd.welch_bundle(training.u, training.y[:,:-1], 1/orbit.dt_s, L)
+table(['Window samples','Resolution [cycles/day]','Windows','Supported nonzero bins',
+       'X/Y/Z bins meeting coherence screen'],
+      [(L, f'{86400/(orbit.dt_s*L):.3g}', q['segments'],
+        f"{np.sum(q['supported'][1:])}/{len(q['supported'])-1}",
+        ' / '.join(str(np.count_nonzero(q['coherence'][1:,c,c][q['supported'][1:]]
+                       >= orbit.settings['coherence_threshold'])) for c in range(3)))
+       for L,q in welch.items()])
+print(f"The pairwise coherence screen is {orbit.settings['coherence_threshold']:.2f}. "
+      "Short windows yield more averages. Full-orbit windows resolve one cycle per orbit.")
+'''),
+('md', r'''
+## 3. Do the trajectories support phase-dependent actuator gains?
+
+The **global-gain** model pools all training trajectories and phases into one gain per burn axis. The **periodic-gain** model pools independent passes through the same orbital phases, interpolates between six overlapping phase windows, and smooths neighboring gains across the end of the orbit. Both use phase-dependent STMs and measurement geometry. The simulator uses constant actuator gains, so phase-dependent fitted gains can absorb discrepancies between the nonlinear simulation and the linearized predictor.
+
+The fit minimizes joint, covariance-standardized one-step angular innovations on eight open-loop training trajectories. Four independent trajectories support validation and four support the final test. For the BIC comparison, fit the phase-window alternatives **without** smoothing on the same training epochs. The nominal BIC difference combines the Gaussian innovation sum of squares and the parameter penalty $d\log N$ (with $N$ measured epochs and $d$ gain coefficients). The innovation covariance schedule is fixed across the candidates, so its log-determinant cancels. The criterion is a relative comparison under the working innovation model. Short records and residual dependence limit its interpretation. The smoothed six-window candidate is evaluated separately with the global model for the test and annual trial.
 '''),
 ('code', SETUP+'''
 orbit,data=sk.restore_study(ROOT,OUT/'data')
@@ -242,13 +355,36 @@ def save_fit(name, result):
 
 save_fit('greybox_fit.json',fit)
 save_fit('global_greybox_fit.json',global_fit)
+
+training = data['training']
+window_counts = sorted({3, fit['windows']})
+n_epochs = int(training.visible.any(axis=-1).sum())
+candidates = [('Global',3,global_fit['cost'],global_fit['gains'])]
+for windows in window_counts:
+    candidate = sk.fit_periodic_greybox(orbit, training, windows=windows, smoothing=0)
+    candidates.append((f'{windows} phase windows',3*windows,
+                       candidate['training_cost'],candidate['gains']))
+selection = []
+for name, d, cost, candidate_gains in candidates:
+    validation = sk.predict(orbit, data['validation'], candidate_gains)['standardized']
+    selection.append(dict(model=name, d=d, training_sum_squares=2*cost,
+                          bic_relative=2*cost+d*np.log(n_epochs),
+                          validation_rms=float(np.sqrt(np.nanmean(validation**2)))))
+best = min(selection,key=lambda r:r['bic_relative'])
+table(['Training candidate','Gain coefficients','Training sum of squares','ΔBIC','Validation RMS [standardized]'],
+      [(r['model'],r['d'],f"{r['training_sum_squares']:.1f}",
+        f"{r['bic_relative']-best['bic_relative']:.2f}",f"{r['validation_rms']:.3f}") for r in selection])
+best_validation = min(selection,key=lambda r:r['validation_rms'])
+display(Markdown(f"**Model selection.** The lowest nominal BIC is **{best['model']}**. "
+                 f"The lowest validation innovation RMS is **{best_validation['model']}**. "
+                 "Lower BIC favors explaining the data with fewer gain coefficients. "
+                 "The validation score checks how well those gains predict angles on new trajectories."))
+(OUT/'gain_model_selection.json').write_text(json.dumps(selection,indent=2)+'\\n')
 '''),
 ('md', r'''
-## Identification and held-out validation
+## 4. Do the angular updates improve held-out navigation?
 
-Following Studios 5 and 11, minimize covariance-standardized **raw angular innovations** on training trajectories, updating only when an LSO is visible. No generated full-state observations or saved truth enter the fit. Filtered state histories are correlated outputs, so they support exploratory plots and guidance, not independent-measurement regression.
-
-Both variants use the same training, validation and test trajectories. Lecture 13 motivates a local approximation when full-record stationarity is doubtful. Here windows are indexed by orbital phase, so training can pool repeated passages through the same phase. Adjacent gains are regularized towards one another, with no test-driven choice of window count. Independent test trajectories assess angular prediction and navigation accuracy. Free propagation uses its initial angular update and then the known commands, with no later measurements. Truth is used only to evaluate state errors.
+Compare each model's state estimate against the simulator's truth. The free prediction uses the first angular update and the known burn commands, then coasts without more angles. The updated estimate uses angles every time an LSO is visible. The angular RMSE below is the one-step error **before** using that epoch's measurement.
 '''),
 ('code', '''
 scores={model:{split:sk.prediction_scores(orbit,rec,model_gains) for split,rec in data.items()}
@@ -265,45 +401,66 @@ predictions={label:(sk.predict(orbit,test,local),sk.predict(orbit,test,local,fre
 pred,free=predictions['Periodic gains']
 plots.compare_heldout(orbit,test,predictions,OUT/'figures')
 np.savez_compressed(OUT/'test_predictions.npz',**pred,free_simulation=free['navigation'])
+for label, q in scores.items():
+    pos = q['test']['navigation']['position_rmse_km']
+    coast = q['test']['free_run']['position_rmse_km']
+    display(Markdown(f"**{label}.** Test position RMSE is {pos:.3f} km with angle updates "
+                     f"and {coast:.3f} km in free prediction."))
 '''),
 ('md', r'''
-## Do the residuals support the predictor?
+## 5. Do the residuals support the burn path $G$ and the noise path $H$?
 
-Use standardized angular innovations with actual time lags and visibility gaps intact. Ljung–Box uses eligible contiguous runs with Holm adjustment. A mask-conditioned Monte Carlo maximum-CCF test covers the input/channel/lag family. No gaps or independent trajectories are concatenated, and no fitted ARMA degrees of freedom are subtracted for the fixed model on test data.
+An **innovation** is a measured angle minus its one-step prediction. For this check, the filter standardizes the innovations jointly using its predicted covariance, including correlations among visible angles at the same epoch. These standardized coordinates can mix visible angles, so the whiteness check refers to predictor coordinates. Section 1 reports the individual measured angles.
 
-ADF and KPSS use the longest uninterrupted observed run for each channel. The table reports the channels that support testing. A coverage summary reports any channels left out. Residual whiteness checks the adequacy of the assumed noise model. Residual–input correlation checks whether commanded impulses remain related to the prediction error. Controller performance is evaluated separately using the corridor limits.
+- **$G$, input–output dynamics.** If past commands still correlate with the innovation, the model may have missed a burn response. We correlate $u_k$ with the innovation at $k+1$ and later, across all three axes and all supported standardized coordinates. We redraw the independent open-loop commands for a maximum-correlation reference while keeping residuals and masks fixed. This screen preserves residual serial dependence and uses observed visibility as fixed. Its conclusion applies to the tested excitation, lags and measurements. The simulated visibility can depend on the trajectory, so this is a screening p-value conditional on the observed mask.
+- **$H$, noise and uncertainty.** If the filter models the predictable part of the angle errors, the innovations should have little residual serial correlation. Ljung–Box tests the longest uninterrupted run in each eligible test trajectory and coordinate. Holm adjustment accounts for the eligible family within each model. The error plots use original sample lags and omit missing pairs. A rejection can reflect dynamics, uncertainty tuning, or the measurement model, even though the simulated sensor noise is white by construction.
 '''),
 ('code', '''
 reports={label:ld.residual_report(updated['standardized'],test.u,orbit.settings['residual_lags'])
          for label,(updated,_) in predictions.items()}
 residual=reports['Periodic gains']
 plots.compare_angular_residuals(reports,OUT/'figures')
-table(['Model','Ljung–Box rejects','Eligible runs','Input–innovation p'],
-      [(label,int(np.nansum(q['ljung_box_holm_p']<orbit.settings['alpha'])),
-        q['eligible_whiteness_tests'],f"{q['ccf_global_p']:.3g}")
-       for label,q in reports.items()])
-stationarity_rows=ld.stationarity_rows(pred['standardized'])
-tested=[r for r in stationarity_rows if r['adf_p'] is not None and r['kpss_p'] is not None]
-if tested:
-    table(['Angular channel','Contiguous samples','ADF p','KPSS p','Joint reading'],
-          [(r['channel'],r['contiguous_samples'],f"{r['adf_p']:.3g}",
-            f"{r['kpss_p']:.3g}",r['reading']) for r in tested])
-    if len(tested)==len(stationarity_rows):
-        display(Markdown(f'**Angular stationarity coverage:** All {len(tested)} channels meet the contiguous-sample requirement. The table reports the periodic fit.'))
-skipped=[r for r in stationarity_rows if r['adf_p'] is None or r['kpss_p'] is None]
-if skipped:
-    sites=', '.join(sorted({r['channel'].rsplit(' ',1)[0] for r in skipped}))
-    counts=[r['contiguous_samples'] for r in skipped]
-    coverage=str(min(counts)) if min(counts)==max(counts) else f'{min(counts)}–{max(counts)}'
-    display(Markdown(f'**Angular stationarity coverage:** Tested {len(tested)} of {len(stationarity_rows)} channels. '
-                     f'The {len(skipped)} skipped channels ({sites}) had longest observed runs of {coverage} '
-                     f'consecutive samples. ADF and KPSS require at least {ld.ANGULAR_STATIONARITY_MIN_SAMPLES} here.'))
-(OUT/'innovation_stationarity.json').write_text(json.dumps(stationarity_rows,indent=2)+'\\n')
+diagnostic_rows = []
+for label, q in reports.items():
+    adjusted = q['ljung_box_holm_p']
+    rejected = np.argwhere(adjusted < alpha)
+    n = q['eligible_whiteness_tests']
+    p = q['ccf_global_p']
+    diagnostic_rows.append(dict(model=label,rejects=len(rejected),eligible=n,
+                                g_p=p,max_command_lag_samples=q['lags']+1))
+    if n == 0:
+        h_reading = 'Visibility left no runs long enough to test whiteness.'
+    elif len(rejected):
+        runs = ', '.join(f'seed {test.seeds[a]}, coordinate {c+1} (adjusted p={adjusted[a,c]:.3g})'
+                         for a,c in rejected)
+        h_reading = f'Some prediction errors retain time structure. Rejected runs: {runs}.'
+    else:
+        h_reading = 'The eligible runs show no detectable serial dependence at the tested lags.'
+    if p is None:
+        g_reading = 'Too few usable command–innovation pairs to test the burn response.'
+    elif p < alpha:
+        g_reading = 'Past burns still predict part of the innovation. Revisit the command-to-angle model.'
+    else:
+        g_reading = 'No detectable command–innovation correlation over the tested lags.'
+    display(Markdown(f'**{label}.** **G:** {g_reading} **H:** {h_reading}'))
+table(['Model','G: command–innovation p','H: Ljung–Box rejections','Eligible runs'],
+      [(r['model'],test_p(r['g_p']),r['rejects'],r['eligible']) for r in diagnostic_rows])
+print('Eligible runs use at least 24 consecutive samples. The input screen covers command-to-angle '
+      f'delays of 1–{diagnostic_rows[0]["max_command_lag_samples"]} samples.')
+(OUT/'gain_model_diagnostics.json').write_text(json.dumps(diagnostic_rows,indent=2)+'\\n')
+# Retain an angle-by-angle stationarity check for the periodic predictor.
+innovation_rows = ld.stationarity_rows(pred['residual'] / ARCSEC)
+display(Markdown('**Additional check.** ADF and KPSS on the raw periodic-model '
+                 'innovations describe their level behavior. Ljung–Box above tests whiteness.'))
+table(['Raw innovation','Test seed','Consecutive samples','ADF p','KPSS p*','Reading'],
+      [(r['channel'],test.seeds[r['arc']],r['contiguous_samples'],test_p(r['adf_p']),
+        test_p(r['kpss_p']),r['reading']) for r in innovation_rows])
+(OUT/'innovation_stationarity.json').write_text(json.dumps(innovation_rows,indent=2)+'\\n')
 np.savez_compressed(OUT/'residual_checks.npz',**{k:v for k,v in residual.items() if isinstance(v,np.ndarray)})
 (OUT/'optical_residual_summary.json').write_text(json.dumps({k:v for k,v in residual.items() if not isinstance(v,np.ndarray)},indent=2)+'\\n')
 '''),
 ('md', r'''
-## Does the gain model change full-year station-keeping?
+## 6. Do the burn commands keep the spacecraft within the corridor?
 
 Guidance uses only the LSO-derived departure estimate, with state updates at every measurement sample and planner calls at every measurement sample (about 1.5 hours). Candidate burns are checked by nonlinear propagation. The one-year run reports sampled corridor performance and the cumulative commanded Δv from the actual simulated impulses.
 
@@ -333,16 +490,26 @@ summary=trial['summary']
 table(['Metric','Observed value'],[(k,summary[k]) for k in ('completed','requested_duration_days','last_day','planning_stride_steps','planning_margin','maximum_position_km','maximum_velocity_m_s','all_evaluated_samples_inside','first_sampled_exit_day','burns','total_commanded_delta_v_m_s','annual_delta_v_m_s','visible_epoch_fraction')])
 np.savez_compressed(OUT/'closed_loop.npz',**{k:v for k,v in trial.items() if k!='summary'})
 (OUT/'closed_loop_summary.json').write_text(json.dumps(summary,indent=2)+'\\n')
-rejects=int(np.nansum(residual['ljung_box_holm_p']<.05))
-display(Markdown(f'**Noise-model conclusion:** {rejects}/{residual["eligible_whiteness_tests"]} eligible whiteness tests reject after adjustment and the global residual–input p-value is {residual["ccf_global_p"]:.3g}, so these tests '+('flag predictor/noise inadequacy.' if rejects or residual['ccf_global_p']<.05 else 'do not reject the tested assumptions at 5%, without proving the model correct.')))
-compliant=[model for model,q in comparison.items() if q['completed'] and q['all_evaluated_samples_inside']]
-status = ', '.join(compliant) if compliant else 'Neither gain model'
-display(Markdown(f'**Full-year corridor compliance:** {status}. This is a paired comparison for one starting departure and one observation-noise seed.'))
+for model, q in comparison.items():
+    exit_day = q['first_sampled_exit_day']
+    if exit_day is not None:
+        reading = (f'First corridor violation on day {exit_day:.2f}. '
+                   'Cumulative commanded Δv includes burns after the violation.')
+    elif q['completed']:
+        reading = 'Every evaluated sample stayed inside both corridor limits for the full year.'
+    else:
+        reading = 'The run ended before the full year without an observed corridor violation.'
+    display(Markdown(f'**{model}.** {reading}'))
+display(Markdown('The paired comparison uses one starting departure and one observation-noise seed.'))
 '''),
 ('md', r'''
-## Next model discussion
+## 7. What the grey box can support
 
-Stationarity checks describe the records, while the phase-dependent impulse sensitivity motivates the periodic model structure. Held-out prediction, residual whiteness and annual corridor performance determine what the additional local gains are worth. Review LSO availability, gain uncertainty, raw angular residuals and navigation error before selecting a local OE/BJ model or periodic parameter basis (Studio 13). NARX remains deferred. Improving navigation or the burn planner may matter more than increasing black-box complexity.
+For the saved experiment, the grey box supports orbit estimation. The angular updates improve held-out position and velocity estimates, and the global gain fit is the simpler baseline favored by BIC and validation. Some measured offsets, including LSO 3 declination, show evidence against a constant level. The held-out tests find no detectable dependence on past burns or violations of whiteness in the eligible standardized innovation runs. These findings apply to the measured phases and lags. The paired annual trial has one starting departure and one noise seed, so it gives an example of corridor performance for each model.
+
+For guidance, compare the single-burn planner against **output-feedback model predictive control (MPC)**, which can optimize several future burns under corridor and command constraints and replan as new estimates arrive. Also benchmark the differential-correction and minimization variants of x-axis crossing targeting, with and without covariance-aware prediction, from Shimane et al. (arXiv:2512.01182v4). Use matched starting departures and noise seeds to compare full-year corridor passes and cumulative commanded $\Delta v$.
+
+For identification, investigate phase- and visibility-dependent innovation structure before adding parameters. A local output-error (OE) benchmark assumes noise at the angle output. A local Box–Jenkins (BJ) benchmark can model a separate colored disturbance path if the records support estimating it. Compare both paths on independent trajectories in the same phase and visibility ranges.
 ''')]
 
 

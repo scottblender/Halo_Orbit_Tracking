@@ -1,8 +1,8 @@
 # Course methods and the LSO data path
 
-The project asks whether LSO angular data can support prediction of impulse
-magnitude and orbital phase while maintaining a 10 km position limit and a
-0.1 m/s velocity limit. Position and inertial-velocity departures are resolved
+The project asks whether a planner using state estimates from LSO angles can
+select corrective burns that keep the spacecraft within 10 km of its nominal
+position and 0.1 m/s of its nominal velocity. Position and inertial-velocity departures are resolved
 on rotating Earth–Moon axes. The velocity conversion includes the transport
 term from the rotating frame.
 
@@ -12,7 +12,7 @@ term from the rotating frame.
 | 04 LeastSquares | Scaled coordinates, least-squares impulse calculation and gain-sensitivity conditioning |
 | 05 Likelihood | Gaussian angular-innovation criterion and conditional parameter uncertainty |
 | 06 Stationarity | Correlation-aware segment statistics and paired ADF/KPSS tests |
-| 07 ImpulseToSpectrum | Impulse/output alignment, lag analysis and excitation |
+| 07 ImpulseToSpectrum | Impulse/output alignment, phase-dependent burn response, lag analysis and excitation |
 | 08 WelchInYourHands | Hann windows, 50% overlap, resolution sensitivity, MIMO spectral ratios and coherence |
 | 09 ARMAPolesToModes | Physical interpretation of stability, using Floquet multipliers for this periodic orbit |
 | 10 SameDataFourStructures | Separate dynamics accuracy from noise-model adequacy |
@@ -49,8 +49,10 @@ dynamics. Thus, these plots do not identify a plant-only global LTI transfer
 function. Raw angular residual tests preserve actual time lags and independent
 arc boundaries. Ljung–Box and ADF/KPSS use sufficiently long contiguous runs,
 with insufficient support reported explicitly. Holm adjustment covers eligible
-whiteness tests. A Gaussian Monte Carlo maximum-CCF test conditions on the actual
-masks and fixed open-loop commands.
+whiteness tests. A Monte Carlo maximum-CCF screen redraws randomized open-loop commands while
+conditioning on the observed masks and innovations. It preserves residual serial
+dependence. Paired ADF/KPSS checks describe both measured-minus-reference angles
+and raw angle innovations.
 
 ## Model conclusions and performance
 
@@ -63,10 +65,11 @@ periodic. These statements describe different parts of the same system.
 
 Uncontrolled propagation requests up to 24 orbits with no physical state resets.
 A declared 20,000 km departure cutoff or an integration failure ends the
-propagation early and is reported. Two orthographic projections avoid the
-earlier overlapping 3-D labels. Every figure has a purpose sentence and a result
-sentence computed from that run. Notebook 2 retains three figures and presents
-the remaining checks in tables.
+propagation early and is reported. Notebook 01 shows the training angle stationarity checks, Welch spectra and FRFs,
+phase sensitivity, Floquet modes and validation residual checks for the unit-gain
+baseline. Notebook 02 shows the phase-dependent command-to-angle response and
+compares global and periodic actuator gains on the same STM using training BIC,
+independent validation and held-out checks of the burn and noise paths.
 
 Guidance uses only the LSO-derived estimate to choose impulse magnitude and
 phase. Nonlinear truth evaluates both sides of each impulse and coast substeps.

@@ -354,11 +354,11 @@ def compare_angular_residuals(reports, out):
     for ax, (name, report) in zip(axes[0], reports.items()):
         for c, channel in enumerate(report['acf'].T):
             ax.plot(np.arange(1, report['lags']+1), channel,
-                    label=f'LSO {c//2+1} '+('α' if c%2==0 else 'δ'))
+                    label=f'Coordinate {c+1}')
         ax.axhline(0, color='grey', lw=.7)
         ax.set(title=name, xlabel='Actual lag [samples]')
         rejects = int(np.nansum(report['ljung_box_holm_p'] < .05))
-        results.append(f'{name} reject whiteness in {rejects} of {report["eligible_whiteness_tests"]} eligible runs')
+        results.append(f'{name} show {rejects} whiteness rejections in {report["eligible_whiteness_tests"]} eligible runs')
     axes[0, 0].set_ylabel('Angular innovation autocorrelation')
     axes[0, 0].legend(fontsize=9, ncol=2)
     finish(fig, out, '09_optical_innovation_checks',
