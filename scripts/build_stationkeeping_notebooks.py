@@ -35,13 +35,17 @@ def table(headers,rows):
 
 INTRO = [
 ('md', r'''
-# 1. LSO data and NRHO station-keeping identification
+# 1. What do the LSO measurements tell us about halo-orbit station-keeping?
 
-**Question:** Can an LSO-informed, phase-dependent model choose the impulse magnitude and orbital phase needed to keep a spacecraft within **10 km** in position and **0.1 m/s** in velocity of its nominal NRHO?
+A near-rectilinear halo orbit (NRHO) is a repeating path near the Moon. Small position and velocity errors can grow from one orbit to the next. Three simulated **lunar surface observatories (LSOs)** measure the direction of the spacecraft. The estimator uses these angles and previous burn commands to infer the spacecraft's departure. The station-keeping planner then chooses when to burn and how much velocity to change to stay within **10 km** and **0.1 m/s** of the reference orbit.
 
-An NRHO is a repeating path near the Moon. An impulse is a short velocity change that corrects departure from that path. Three **lunar surface observatories (LSOs)** measure line-of-sight angles, not position or velocity directly. Their noisy angles and actual visibility gaps feed a state estimator. Simulation truth is reserved for generating sensors and evaluating accuracy.
+| Signal | What it means |
+| --- | --- |
+| Input $u_k$ | Commanded three-axis velocity change $\Delta v$, in m/s |
+| Measured output $z_{j,k}$ | Right ascension ($\alpha$) and declination ($\delta$) from visible LSO $j$ |
+| Estimated state $e_k$ | Three position and three velocity departures from the planned orbit |
 
-Inputs are commanded impulses in three directions. Reconstructed outputs are position and inertial-velocity departures resolved along rotating Earth–Moon axes. Phase means time through the orbit in degrees, not a geometric angle. Measurements at epoch $k$ precede impulse $u_k$, which affects the next state.
+The identification data use independent, randomized open-loop burn commands to excite the three axes. The observation at epoch $k$ comes before burn $u_k$. Its first effect on a sampled angle can appear at $k+1$. The annual closed-loop guidance experiment uses a planner to select commands from the estimated departure.
 '''),
 ('code', SETUP+'''
 orbit,data=sk.prepare_study(ROOT,OUT/'data')
@@ -56,32 +60,85 @@ plots.inputs_outputs(orbit,training,OUT/'figures')
 ('md', r'''
 ## What is actually measured?
 
-The commanded input is the impulse $u_k$ in m/s. The physical state output is the departure $e_k=[\delta r_k,\delta v_k]$. The measured output used for identification is the pair of inertial-axis angles $z_{j,k}=[\alpha,\delta]$ from each visible LSO. For a visible site, $z_{j,k}=h_j(t_k,x_k)+v_{j,k}$, where $h_j$ is the ideal nonlinear line-of-sight measurement.
+The deterministic burn-response path **$G$** runs from commanded $\Delta v$ through the actuator gains, orbit dynamics and sightline geometry to the measured angles. At a given phase, the ideal angular response changes as the spacecraft moves and the LSO view changes.
 
-The simulator injects $v_{j,k}$ additively at the sensor output, after computing $h_j$ and before the visibility mask. Each angle component has independent zero-mean Gaussian noise with $\sigma_\theta=1$ arcsec, so $R=\sigma_\theta^2 I_2$ and the assumed measurement noise is white across epochs and sites. This is a synthetic sensor-noise assumption. There are no real LSO calibration residuals here to establish that an actual instrument has white or Gaussian noise. Bias and colored noise are not modeled. The innovation tests check consistency of this assumed model with the simulation, not real sensor hardware. Missing angles are caused by visibility, not by the noise model.
+$$z_{j,k}=h_j(t_k,x_k)+v_{j,k}$$
+
+The noise path **$H$** includes additive sensor noise $v_{j,k}$. The simulator adds independent, zero-mean Gaussian noise with a standard deviation of 1 arcsecond to each ideal angle, then masks invisible observations. The filter also allows uncertainty in state propagation. A state disturbance can carry into future angles. Independent sensor draws describe the simulated sensor, while the filter's innovations reveal how well the full predictor accounts for expected errors.
+
+We pool the training trajectories by adding their contributions to spectra or fits. Each trajectory keeps its own time axis, visibility gaps and starting state. Validation and test use different trajectories from training.
 '''),
 ('code', '''
 plots.lso_measurements(orbit,training,OUT/'figures')
 plots.diagram(orbit,OUT/'figures')
 '''),
 ('md', r'''
+## Do the measured angles stay at a constant level?
+
+Subtract the ideal angle on the reference orbit before testing. The resulting measured offset still includes real departure in the simulation and sensor noise. For each LSO angle we use its longest uninterrupted **training** record and show the seed, sample count and four-segment mean and variance checks. Gaps remain missing.
+
+ADF tests a unit-root null and KPSS tests a level-stationarity null. At 5%, rejecting ADF while retaining KPSS supports a constant level. A KPSS rejection is evidence against a constant level. ADF and KPSS describe these records. The orbital model's phase dependence is evaluated separately using the response to burns.
+'''),
+('code', '''
+angle_checks=ld.stationarity_rows(sk.measured_angle_offsets(orbit,training))
+def p_value(value):
+    return '—' if value is None else f'{value:.3g}'
+table(['Measured offset','Training seed','Consecutive samples','ADF p','KPSS p*',
+       'Mean flags / 4','Variance flags / 4','Joint reading'],
+      [(r['channel'],training.seeds[r['arc']],r['contiguous_samples'],p_value(r['adf_p']),
+        p_value(r['kpss_p']),r.get('mean_flags','—'),r.get('variance_flags','—'),r['reading'])
+       for r in angle_checks])
+print('* KPSS reports table bounds for extreme p-values. Segment flags use the approximate 95% bands.')
+readings = {
+    'supports level stationarity': 'The unit-root test rejects and the level-stationarity test retains its null. This run supports a constant level.',
+    'conflicting tests': 'Both tests reject. A constant level is questionable even though ADF rejects a unit root.',
+    'evidence against level stationarity': 'KPSS rejects a constant level and ADF cannot rule out a unit root. Treat a constant mean over this run as unsupported.',
+    'inconclusive / low power': 'Neither test rejects. This run gives too little evidence to decide whether a constant level is reasonable.',
+    'insufficient contiguous observations': 'Visibility leaves too few consecutive measurements for the tests.',
+}
+for r in angle_checks:
+    name, angle=r['channel'].rsplit(' ',1)
+    label='declination' if angle=='delta' else 'right ascension'
+    reading=readings[r['reading']]
+    if r.get('mean_flags',0) or r.get('variance_flags',0):
+        reading+=f" The segment check flags {r['mean_flags']} means and {r['variance_flags']} variances out of four."
+    display(Markdown(f'**{name} {label}.** {reading}'))
+(OUT/'training_angle_stationarity.json').write_text(json.dumps(angle_checks,indent=2)+'\\n')
+'''),
+('md', r'''
 ## Welch spectra and empirical response
 
-Following Studios 7–8, use Hann windows and 50% overlap, averaging within separate trajectories. The full MIMO estimate is $\hat H=\hat S_{yu}\hat S_{uu}^{-1}$ with cross-spectrum $Y U^*$. The displayed channels are its three direct position responses. Because $y$ is an **LSO-derived state estimate**, its response includes estimator dynamics and is not the physical plant transfer function alone.
+Following Studios 7–8, use Hann windows with 50% overlap. Pool windows within separate trajectories using the same sample cadence. The multi-input, multi-output frequency response (FRF) estimate is $\hat G_{\mathrm{nav}}=\hat S_{yu}\hat S_{uu}^{-1}$. Here $y$ is the LSO-derived state estimate. The FRF therefore includes filtering and coast intervals, and describes the command-to-navigation path. The physical command-to-angle path also depends on orbital phase and which LSOs are in view.
 
-Compare window lengths before interpreting peaks: quarter-orbit windows cannot resolve the orbital fundamental, while full-orbit windows leave one window per trajectory. These are finite-record summaries. A stationary output spectrum or global LTI transfer function is not assumed.
+Check the spectral resolution, the number of averaged windows, conditioning of the three-input spectrum and coherence. Pairwise coherence indicates where a single command axis and the corresponding estimated position tend to vary together at the same frequency. The 0.8 threshold is an exploratory screen. Because the experiment spans a phase-varying orbit, use these plots to assess excitation and repeatable frequency content over the sampled records.
 '''),
 ('code', '''
 s=orbit.settings
-spec=sd.welch_bundle(training.u,training.y[:,:-1],1/orbit.dt_s,s['welch_length'])
-table(['Window length','Resolution [cycle/day]','Averaged windows'],[(L,f'{86400/(orbit.dt_s*L):.3g}',sd.welch_bundle(training.u,training.y[:,:-1],1/orbit.dt_s,L)['segments']) for L in (16,32,64,128)])
+windows = sorted({orbit.n//8,orbit.n//4,orbit.n//2,orbit.n,s['welch_length']})
+spectra = {L:sd.welch_bundle(training.u,training.y[:,:-1],1/orbit.dt_s,L)
+           for L in windows}
+spec=spectra[s['welch_length']]
+table(['Window samples','Resolution [cycles/day]','Averaged windows','Supported nonzero bins'],
+      [(L,f"{86400/(orbit.dt_s*L):.3g}",q['segments'],
+        f"{np.sum(q['supported'][1:])}/{len(q['supported'])-1}") for L,q in spectra.items()])
+threshold=s['coherence_threshold']
+table(['Direct command–position pair','Bins above coherence screen','Total supported nonzero bins'],
+      [(axis,int(np.count_nonzero(spec['coherence'][1:,c,c][spec['supported'][1:]]>=threshold)),
+        int(np.sum(spec['supported'][1:]))) for c,axis in enumerate('XYZ')])
+cycle_per_day=86400/(orbit.n*orbit.dt_s)
+display(Markdown(f"**Resolution and support.** The orbital fundamental is {cycle_per_day:.3f} cycles/day. "
+                 f"The {spec['length']}-sample window resolves {86400/(orbit.dt_s*spec['length']):.3f} "
+                 "cycles/day, so use it to examine broader frequency content. "
+                 "A full-orbit window resolves the fundamental with one window per trajectory."))
 plots.spectra(orbit,spec,OUT/'figures')
 plots.frf(spec,OUT/'figures')
 '''),
 ('md', r'''
-## Stationarity and model structure
+## What changes with orbital phase?
 
-Studio 6 compares segment means/variances and pairs ADF (unit-root null) with KPSS (level-stationarity null). Here the reconstructed states include estimator dynamics. Angular gaps are never filled to manufacture measurements. The phase/linearity/Floquet plots then test whether a local time-invariant approximation is credible and whether perturbations grow over an orbit.
+We also check stationarity on the six estimated departure components of the first training trajectory. These values include filter updates when angles are available and propagated estimates during gaps.
+
+To check the physics, apply the same small velocity perturbation at different phases and compare the resulting departures. Then compare a nonlinear propagation with the local state-transition matrix (STM) at several starting amplitudes. Finally, multiply the STMs over one orbit to obtain the **Floquet multipliers**, the periodic system's open-loop modes. A multiplier with magnitude above one signals growth each orbit. The time-varying and intermittently visible angle channels have no single global LTI pole-zero model.
 '''),
 ('code', '''
 names=['r x','r y','r z','v x','v y','v z']
@@ -93,6 +150,40 @@ plots.stationarity(orbit,training,stationarity_rows,OUT/'figures')
 diagnostics=physics.finite_horizon_diagnostics(orbit)
 plots.structure(diagnostics,OUT/'figures')
 np.savez_compressed(OUT/'structure_diagnostics.npz',**diagnostics)
+'''),
+('md', r'''
+## Do the baseline errors show a missing burn or noise response?
+
+Use the physics-based STM with unit actuator gains on independent **validation** trajectories for a baseline. An innovation is the observed angle minus its one-step prediction. Scale the innovations jointly with the predicted covariance before applying two course checks.
+
+- **$G$:** Compare past commands and innovations at their actual lags. Detectable correlation indicates that the predictor leaves some burn-related signal in the errors.
+- **$H$:** Use Ljung–Box on the longest eligible contiguous runs and adjust the whiteness tests together with Holm's method. Detectable serial dependence means that the predictor leaves some time structure, which can reflect dynamics, measurement geometry or the noise model.
+
+We keep visibility gaps and trajectory boundaries. The maximum-correlation screen redraws open-loop commands while holding the observed mask and innovations fixed. These diagnostics set a baseline for the fitted-model checks in Notebook 02.
+'''),
+('code', '''
+validation=data['validation']
+baseline=sk.predict(orbit,validation,np.ones(3))
+baseline_report=ld.residual_report(baseline['standardized'],validation.u,s['residual_lags'])
+baseline_p=baseline_report['ccf_global_p']
+baseline_n=baseline_report['eligible_whiteness_tests']
+baseline_rejects=int(np.count_nonzero(baseline_report['ljung_box_holm_p'] < s['alpha']))
+table(['Path','Validation check','Unit-gain baseline'],
+      [('G','Burn–innovation screen p',p_value(baseline_p)),
+       ('H','Adjusted Ljung–Box rejections',f'{baseline_rejects}/{baseline_n}')])
+if baseline_p is None:
+    g_reading='Visibility leaves too few usable input–innovation pairs.'
+elif baseline_p < s['alpha']:
+    g_reading='Past commands still correlate with prediction errors. The baseline misses some burn-related response.'
+else:
+    g_reading='Past commands show no detectable association with the prediction errors at the tested lags.'
+if not baseline_n:
+    h_reading='No runs are long enough for the whiteness test.'
+elif baseline_rejects:
+    h_reading='Some eligible innovations retain serial dependence after adjustment.'
+else:
+    h_reading='The eligible innovation runs show no detectable serial dependence after adjustment.'
+display(Markdown(f'**G.** {g_reading} **H.** {h_reading}'))
 '''),
 ('md', r'''
 ## Longer propagation shows uncontrolled growth
@@ -108,11 +199,9 @@ np.savez_compressed(OUT/'uncontrolled.npz',day=no_day,output=no_y)
 ('md', r'''
 ## What does this analysis establish?
 
-From this analysis, the NRHO station-keeping system requires a **nonlinear, time-varying model**. The gravitational forces and LSO line-of-sight angles depend nonlinearly on the spacecraft state. The departure dynamics and measurement geometry also change with orbital phase and LSO visibility.
+The nonlinear orbit model propagates the spacecraft, and the phase-dependent STM approximates small departures for estimation. Since the response to the same burn varies with phase, use that phase dependence in the physics of both gain models. The global model can pool all phases to fit one gain per axis. The local model can pool repeated passages near the same phase to estimate effective gains.
 
-The physical CR3BP dynamics are autonomous in rotating coordinates, meaning the gravitational model does not explicitly depend on time. However, the STM is evaluated along the moving nominal orbit, so its coefficients change with orbital phase. Thus, small departures can be described by a **linear time-periodic STM**, with further changes in the measurement equation when LSOs enter or leave view.
-
-Thus, the STM provides a starting point for local grey-box identification. A short-record stationarity test does not remove the measured phase dependence or establish global LTI behavior. NARX remains deferred.
+Notebook 02 compares the gain structures by training BIC and validation, checks $G$ and $H$ on independent test trajectories, and then asks whether either fitted model keeps the spacecraft inside the corridor with the same planner.
 '''),
 ('code', '''
 response=np.linalg.norm(diagnostics['impulse_sensitivity'],axis=(1,2))

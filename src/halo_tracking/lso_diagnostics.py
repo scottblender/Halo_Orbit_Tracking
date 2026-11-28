@@ -16,10 +16,12 @@ def longest_run(values):
     return values[a:b]
 
 
-def stationarity_rows(innovations):
+def stationarity_rows(records):
+    """Describe the longest observed run for each angle and identify its arc."""
     rows=[]
-    for c in range(innovations.shape[-1]):
-        segment=max((longest_run(row[:,c]) for row in innovations),key=len)
+    for c in range(records.shape[-1]):
+        runs = [longest_run(arc[:, c]) for arc in records]
+        arc, segment = max(enumerate(runs), key=lambda pair: len(pair[1]))
         if len(segment) >= ANGULAR_STATIONARITY_MIN_SAMPLES:
             r=stationarity(segment,f'LSO {c//2+1} '+('alpha' if c%2==0 else 'delta'))
             r['contiguous_samples']=len(segment)
@@ -28,6 +30,7 @@ def stationarity_rows(innovations):
             rows.append(dict(channel=f'LSO {c//2+1} '+('alpha' if c%2==0 else 'delta'),
                              contiguous_samples=len(segment),adf_p=None,kpss_p=None,
                              reading='insufficient contiguous observations'))
+        rows[-1]['arc'] = arc
     return rows
 
 
@@ -47,7 +50,9 @@ def residual_report(e,commands,lags=12):
     Ljung-Box uses only the longest contiguous run for each arc/channel, with
     at least 24 samples; it is not applied to a compressed sequence of gaps.
     Holm adjustment covers eligible run tests. A conditional Gaussian Monte
-    Carlo maximum-CCF test uses the exact masks and fixed open-loop commands.
+    Carlo maximum-CCF test redraws the independently randomized Gaussian
+    commands for a no-association reference while preserving residual serial
+    dependence and visibility. The mask is treated as fixed in this screen.
     """
     e=np.asarray(e)[:,1:]  # innovation[k+1] paired with command[k]
     arcs,n,channels=e.shape
@@ -56,22 +61,26 @@ def residual_report(e,commands,lags=12):
     for lag in range(1,lags+1):
         for c in range(channels):
             acf[lag-1,c],pairs[lag-1,c]=_corr(e[:,lag:,c],e[:,:-lag,c])
-    def correlations(errors):
+    def correlations(inputs):
         result=np.full((lags+1,channels,3),np.nan)
         counts=np.zeros_like(result,dtype=int)
         for lag in range(lags+1):
             for c in range(channels):
                 for j in range(3):
-                    result[lag,c,j],counts[lag,c,j]=_corr(errors[:,lag:,c],commands[:,:n-lag,j])
+                    result[lag,c,j],counts[lag,c,j]=_corr(e[:,lag:,c],inputs[:,:n-lag,j])
         return result,counts
-    ccf,ccf_pairs=correlations(e)
-    observed=np.nanmax(abs(ccf)*np.sqrt(ccf_pairs))
-    rng=np.random.default_rng(696012)
-    exceed=0; repetitions=199
-    for _ in range(repetitions):
-        white=np.where(np.isfinite(e),rng.normal(size=e.shape),np.nan)
-        null,count=correlations(white)
-        exceed+=np.nanmax(abs(null)*np.sqrt(count))>=observed
+    ccf,ccf_pairs=correlations(commands)
+    ccf_p = None
+    if np.isfinite(ccf).any():
+        observed = np.nanmax(abs(ccf) * np.sqrt(ccf_pairs))
+        rng = np.random.default_rng(696012)
+        exceed = 0
+        repetitions = 199
+        for _ in range(repetitions):
+            # Pearson correlation is invariant to the command draw's scale.
+            null, count = correlations(rng.normal(size=commands.shape))
+            exceed += np.nanmax(abs(null) * np.sqrt(count)) >= observed
+        ccf_p = (1 + exceed) / (repetitions + 1)
     p=np.full((arcs,channels),np.nan); lengths=np.zeros_like(p,dtype=int)
     for a in range(arcs):
         for c in range(channels):
@@ -86,6 +95,8 @@ def residual_report(e,commands,lags=12):
         adjusted[np.isfinite(p)]=holm(p[np.isfinite(p)])
     return dict(acf=acf,acf_pairs=pairs,ccf=ccf,ccf_pairs=ccf_pairs,
                 ljung_box_p=p,ljung_box_holm_p=adjusted,contiguous_lengths=lengths,
-                ccf_global_p=(1+exceed)/(repetitions+1),
-                standardized_mean=np.nanmean(e,axis=(0,1)),lags=lags,
+                ccf_global_p=ccf_p,
+                standardized_mean=np.divide(
+                    np.nansum(e, axis=(0, 1)), np.isfinite(e).sum(axis=(0, 1)),
+                    out=np.full(channels, np.nan), where=np.isfinite(e).any(axis=(0, 1))),lags=lags,
                 eligible_whiteness_tests=int(np.isfinite(p).sum()))

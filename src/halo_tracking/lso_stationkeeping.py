@@ -57,6 +57,14 @@ def _angular_departure(measured, nominal):
     return delta.ravel()
 
 
+def measured_angle_offsets(orbit, record):
+    """Return the six measured-minus-reference angles in arcsec, preserving gaps."""
+    nominal = np.stack([orbit.observation_terms(k)[0] for k in range(record.angles.shape[1])])
+    offsets = record.angles - nominal
+    offsets[..., 0] = wrap(offsets[..., 0])
+    return offsets.reshape(*offsets.shape[:2], -1) / ARCSEC
+
+
 def schedule(orbit, visible):
     """Covariances/gains conditioned on actual visibility; no fabricated updates."""
     P = orbit.P0.copy()

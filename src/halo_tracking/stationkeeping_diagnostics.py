@@ -8,6 +8,7 @@ solutions. Spectra use SciPy one-sided density, including window power.
 import warnings
 import numpy as np
 from scipy import signal, stats
+from statsmodels.tools.sm_exceptions import InterpolationWarning
 from statsmodels.tsa.stattools import adfuller, kpss
 
 
@@ -46,7 +47,7 @@ def stationarity(y, name):
              (False, True): 'evidence against level stationarity',
              (False, False): 'inconclusive / low power'}[(a[1]<.05, k[1]<.05)]
     return dict(channel=name, adf_p=float(a[1]), kpss_p=float(k[1]),
-                kpss_warning='; '.join(str(w.message) for w in caught), reading=joint,
+                kpss_warning='; '.join(str(w.message) for w in caught if issubclass(w.category, InterpolationWarning)), reading=joint,
                 mean_flags=int(np.sum(np.abs(st['mu']-st['mu'].mean()) > 1.96*st['se_mu'])),
                 variance_flags=int(np.sum(np.abs(st['var']-st['var'].mean()) > 1.96*st['se_var'])))
 
