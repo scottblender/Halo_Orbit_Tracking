@@ -22,6 +22,7 @@ from halo_tracking import lso_stationkeeping as sk
 from halo_tracking import stationkeeping_diagnostics as sd
 from halo_tracking import lso_diagnostics as ld
 from halo_tracking import lso_report_plots as plots
+from halo_tracking import lso_course_plots as course
 ROOT=Path.cwd()
 if not (ROOT/'configs').exists(): ROOT=ROOT.parent
 OUT=ROOT/'artifacts'/'stationkeeping'
@@ -32,6 +33,29 @@ def table(headers,rows):
                      '\\n'.join('| '+' | '.join(map(str,row))+' |' for row in rows)))
 '''
 
+
+
+MEASURED_WELCH = '''
+fs = 1/orbit.dt_s
+length = orbit.settings['welch_length']
+short = max(4, length//2)
+training_offsets = sk.measured_angle_offsets(orbit, training)
+angle_spectra = {L: course.angle_welch(training.u, training_offsets, fs, L)
+                 for L in sorted({short, length})}
+table(['Angle', *[f'{L} samples: windows / supported nonzero bins' for L in angle_spectra]],
+      [(f'LSO {c//2+1} {("α", "δ")[c%2]}',
+        *[f"{q[c]['segments']} / {np.count_nonzero(q[c]['supported'][1:])}"
+           if q[c] is not None else '0 / 0' for q in angle_spectra.values()])
+       for c in range(training_offsets.shape[-1])])
+course.measured_frf(angle_spectra[short], short, fs,
+                    orbit.settings['coherence_threshold'], OUT/'figures')
+'''
+
+MEASURED_WELCH_TEXT = r'''
+### Welch and FRF directly from measured angles
+
+Following Studios 7–8 and Lecture 8, estimate the MIMO response separately for each visible angle. Matched Hann windows stay within uninterrupted runs. Pair the pre-burn angle at epoch $k$ with command $u_k$ to retain the physical delay. Short windows give more visible windows at the expense of frequency resolution. These PSD, gain, phase and coherence estimates summarize the sampled phases of the orbit. Pairwise coherence is a screen for each input–output pair.
+'''
 
 INTRO = [
 ('md', r'''
@@ -75,12 +99,13 @@ plots.diagram(orbit,OUT/'figures')
 ('md', r'''
 ## Do the measured angles stay at a constant level?
 
-Subtract the ideal angle on the reference orbit before testing. The resulting measured offset still includes real departure in the simulation and sensor noise. For each LSO angle we use its longest uninterrupted **training** record and show the seed, sample count and four-segment mean and variance checks. Gaps remain missing.
+Subtract the ideal angle on the reference orbit before testing. The resulting measured offset still includes real departure in the simulation and sensor noise. For each LSO angle we use its longest uninterrupted **training** record and show the seed, sample count and four-segment mean and variance checks. Gaps remain missing. Following Studio 6 and Lecture 6, compare the across-trajectory mean $\mu[t]$, standard deviation $\sigma[t]$ and paired-angle covariance by orbital epoch. Plot each selected run's four segment means, variances, autocovariance and ACF. The inter-angle CCF compares the joint lag structure over those segments.
 
 ADF tests a unit-root null and KPSS tests a level-stationarity null. At 5%, rejecting ADF while retaining KPSS supports a constant level. A KPSS rejection is evidence against a constant level. ADF and KPSS describe these records. The orbital model's phase dependence is evaluated separately using the response to burns.
 '''),
 ('code', '''
-angle_checks=ld.stationarity_rows(sk.measured_angle_offsets(orbit,training))
+offsets = sk.measured_angle_offsets(orbit, training)
+angle_checks = ld.stationarity_rows(offsets)
 def p_value(value):
     return '—' if value is None else f'{value:.3g}'
 table(['Measured offset','Training seed','Consecutive samples','ADF p','KPSS p*',
@@ -103,6 +128,8 @@ for r in angle_checks:
     if r.get('mean_flags',0) or r.get('variance_flags',0):
         reading+=f" The segment check flags {r['mean_flags']} means and {r['variance_flags']} variances out of four."
     display(Markdown(f'**{name} {label}.** {reading}'))
+course.ensemble_moments(orbit, offsets, 'training', OUT/'figures')
+course.angle_segments(orbit, offsets, angle_checks, training.seeds, 'training', OUT/'figures')
 (OUT/'training_angle_stationarity.json').write_text(json.dumps(angle_checks,indent=2)+'\\n')
 '''),
 ('md', r'''
@@ -133,6 +160,8 @@ display(Markdown(f"**Resolution and support.** The orbital fundamental is {cycle
 plots.spectra(orbit,spec,OUT/'figures')
 plots.frf(spec,OUT/'figures')
 '''),
+('md', MEASURED_WELCH_TEXT),
+('code', MEASURED_WELCH),
 ('md', r'''
 ## What changes with orbital phase?
 
@@ -165,6 +194,8 @@ We keep visibility gaps and trajectory boundaries. The maximum-correlation scree
 validation=data['validation']
 baseline=sk.predict(orbit,validation,np.ones(3))
 baseline_report=ld.residual_report(baseline['standardized'],validation.u,s['residual_lags'])
+course.residual_checks({'Unit-gain baseline': baseline_report}, 'validation',
+                       s['alpha'], OUT/'figures')
 baseline_p=baseline_report['ccf_global_p']
 baseline_n=baseline_report['eligible_whiteness_tests']
 baseline_rejects=int(np.count_nonzero(baseline_report['ljung_box_holm_p'] < s['alpha']))
@@ -199,13 +230,22 @@ np.savez_compressed(OUT/'uncontrolled.npz',day=no_day,output=no_y)
 ('md', r'''
 ## What does this analysis establish?
 
-The nonlinear orbit model propagates the spacecraft, and the phase-dependent STM approximates small departures for estimation. Since the response to the same burn varies with phase, use that phase dependence in the physics of both gain models. The global model can pool all phases to fit one gain per axis. The local model can pool repeated passages near the same phase to estimate effective gains.
+The spacecraft dynamics and the line-of-sight observation model are **nonlinear**. The STM and the varying sightline geometry give a **time-varying** local model around the reference orbit. Visible angle records show **nonstationary behavior**. The evidence varies by angle and interval. Since the response to the same burn varies with phase, use that phase dependence in the physics of both gain models. The global model can pool all phases to fit one gain per axis. The local model can pool repeated passages near the same phase to estimate effective gains.
 
 Notebook 02 compares the gain structures by training BIC and validation, checks $G$ and $H$ on independent test trajectories, and then asks whether either fitted model keeps the spacecraft inside the corridor with the same planner.
 '''),
 ('code', '''
 response=np.linalg.norm(diagnostics['impulse_sensitivity'],axis=(1,2))
 radius=float(abs(diagnostics['multipliers']).max())
+amplitude = diagnostics['amplitudes_km']
+error = np.median(diagnostics['linearity_relative_error'], axis=1)
+nonstationary = ', '.join(r['channel'] for r in angle_checks
+                          if r['kpss_p'] is not None and r['kpss_p'] < .05)
+display(Markdown(f'**Nonlinearity.** The median dimensionless STM mismatch across phases '
+                 f'changes from {error[0]:.2e} at {amplitude[0]:g} km to '
+                 f'{error[-1]:.2e} at {amplitude[-1]:g} km perturbation scale.'))
+display(Markdown(f'**Measured angles.** KPSS rejects level stationarity at 5% for '
+                 f'{nonstationary or "no angles in the selected runs"}.'))
 support=sum(r['adf_p']<.05 and r['kpss_p']>=.05 for r in stationarity_rows)
 display(Markdown(f'**Observed evidence:** horizon sensitivity varies by a factor of {response.max()/response.min():.2g} across phase, the largest one-orbit multiplier is {radius:.3g}, and {support}/6 reconstructed state channels give the ADF/KPSS combination supporting level stationarity.'))
 display(Markdown('**Stability conclusion:** '+('the multiplier outside the unit circle identifies a locally unstable mode, and the extended uncontrolled trajectory shows its finite-time consequences.' if radius>1.001 else 'these multiplier calculations do not robustly resolve instability.')))
@@ -233,7 +273,7 @@ $A_k$ is the state-transition matrix (STM) that propagates a small departure for
 ('md', r'''
 ## 1. Are the measured angles stationary?
 
-First subtract the angle predicted on the reference orbit. This accounts for the nominal sightline motion and leaves the **measured angle offset**, which still contains spacecraft departure and sensor noise. We use the longest uninterrupted test run for each angle and print its trajectory seed and length. We also compare means and variances across four subsegments with correlation-aware bands, as in Studio 6. A flag counts a subsegment outside the approximate 95% band around the segment average.
+First subtract the angle predicted on the reference orbit. This accounts for the nominal sightline motion and leaves the **measured angle offset**, which still contains spacecraft departure and sensor noise. We use the longest uninterrupted test run for each angle and print its trajectory seed and length. We also compare means and variances across four subsegments with correlation-aware bands, as in Studio 6. A flag counts a subsegment outside the approximate 95% band around the segment average. The ensemble plots show $\mu[t]$, $\sigma[t]$ and paired-angle covariance at each epoch across test trajectories. The segment autocovariance, ACF and inter-angle CCF show the lag structure across four parts of a contiguous run.
 
 At the 5% level, **ADF** tests a unit-root null and **KPSS** tests a constant-level stationarity null. ADF rejection plus KPSS non-rejection supports level stationarity for that run. If both reject, some behavior departs from the simple level-stationary model even though ADF rejects a unit root. The tests describe these observed records. The phase dependence of the spacecraft dynamics is a separate question.
 '''),
@@ -268,6 +308,8 @@ for r in angle_rows:
                  f"{r['variance_flags']} variances out of four.")
     display(Markdown(f"**{name} {angle} ({'declination' if angle == 'delta' else 'right ascension'}).** "
                      + readings[r['reading']] + flags))
+course.ensemble_moments(orbit, offsets, 'test', OUT/'figures')
+course.angle_segments(orbit, offsets, angle_rows, test.seeds, 'test', OUT/'figures')
 (OUT/'measured_angle_stationarity.json').write_text(json.dumps(angle_rows,indent=2)+'\\n')
 '''),
 ('md', r'''
@@ -328,7 +370,12 @@ table(['Window samples','Resolution [cycles/day]','Windows','Supported nonzero b
        for L,q in welch.items()])
 print(f"The pairwise coherence screen is {orbit.settings['coherence_threshold']:.2f}. "
       "Short windows yield more averages. Full-orbit windows resolve one cycle per orbit.")
+spec = welch[orbit.settings['welch_length']]
+plots.spectra(orbit, spec, OUT/'figures')
+plots.frf(spec, OUT/'figures')
 '''),
+('md', MEASURED_WELCH_TEXT),
+('code', MEASURED_WELCH),
 ('md', r'''
 ## 3. Do the trajectories support phase-dependent actuator gains?
 
@@ -419,7 +466,7 @@ An **innovation** is a measured angle minus its one-step prediction. For this ch
 reports={label:ld.residual_report(updated['standardized'],test.u,orbit.settings['residual_lags'])
          for label,(updated,_) in predictions.items()}
 residual=reports['Periodic gains']
-plots.compare_angular_residuals(reports,OUT/'figures')
+course.residual_checks(reports, 'heldout', alpha, OUT/'figures')
 diagnostic_rows = []
 for label, q in reports.items():
     adjusted = q['ljung_box_holm_p']
@@ -505,7 +552,9 @@ display(Markdown('The paired comparison uses one starting departure and one obse
 ('md', r'''
 ## 7. What the grey box can support
 
-For the saved experiment, the grey box supports orbit estimation. The angular updates improve held-out position and velocity estimates, and the global gain fit is the simpler baseline favored by BIC and validation. Some measured offsets, including LSO 3 declination, show evidence against a constant level. The held-out tests find no detectable dependence on past burns or violations of whiteness in the eligible standardized innovation runs. These findings apply to the measured phases and lags. The paired annual trial has one starting departure and one noise seed, so it gives an example of corridor performance for each model.
+The spacecraft dynamics and sightline observations are **nonlinear**. The local model is **time-varying** even with constant actuator gains. Section 2 shows how the same burn produces different angular responses at different phases. The visible angle records show **nonstationary behavior**, with channel-specific evidence in the moment, segment and ADF/KPSS results in Section 1.
+
+The grey box supports orbit estimation in this experiment. The angular updates improve held-out position and velocity estimates, and the global gain fit is the simpler baseline favored by BIC and validation. The held-out tests find no detectable dependence on past burns or violations of whiteness in the eligible standardized innovation runs. These findings apply to the measured phases and lags. The paired annual trial has one starting departure and one noise seed, so it gives an example of corridor performance for each model.
 
 For guidance, compare the single-burn planner against **output-feedback model predictive control (MPC)**, which can optimize several future burns under corridor and command constraints and replan as new estimates arrive. Also benchmark the differential-correction and minimization variants of x-axis crossing targeting, with and without covariance-aware prediction, from Shimane et al. (arXiv:2512.01182v4). Use matched starting departures and noise seeds to compare full-year corridor passes and cumulative commanded $\Delta v$.
 
